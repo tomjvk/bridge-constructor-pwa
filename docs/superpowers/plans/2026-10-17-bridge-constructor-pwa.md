@@ -94,12 +94,29 @@ Run: `npx vitest run`
 Run: `npx vite build`  
 Expected: All tests PASS, build succeeds without error.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Setup Dockerfile, Nginx configuration, and deploy to Coolify**
+
+Create `nginx.conf` and multi-stage `Dockerfile`.
+Build local image:
+```bash
+docker build -t bridge-constructor:latest .
+```
+Deploy to Coolify via CLI on the Hetzner host per `server-management` skill:
+1. Find server/project UUIDs via `coolify app list`.
+2. Create/configure application:
+   `coolify app create dockerimage --server-uuid <server_uuid> --project-uuid <project_uuid> --environment-name production --docker-registry-image-name "bridge-constructor:latest" --ports-exposes 3000`
+3. In `/data/coolify/applications/<app_uuid>/docker-compose.yaml`, set `pull_policy: never`.
+4. Set domain: `coolify app update <app_uuid> --domains 'https://bridge.77.42.36.199.sslip.io'`
+5. Deploy: `coolify deploy uuid <app_uuid>`
+
+- [ ] **Step 7: Commit & Manual Verification Gate**
 
 ```bash
-git add package.json tsconfig.json vite.config.ts index.html src/ tests/
-git commit -m "feat: complete Slice 1 walking skeleton with basic PBD and Three.js canvas"
+git add package.json tsconfig.json vite.config.ts index.html src/ tests/ Dockerfile nginx.conf
+git commit -m "feat: complete Slice 1 walking skeleton and deploy to Coolify"
 ```
+**User Inspection Gate:** Provide live URL (`https://bridge.77.42.36.199.sslip.io`) to user. Pause and wait for user's manual inspection and confirmation before proceeding to Task 2.
+
 
 ---
 
@@ -177,12 +194,15 @@ Implement `stepSimulation` with 15 sub-iterations and strut snapping.
 Run: `npx vitest run`  
 Expected: All tests PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Commit, Redeploy to Coolify & User Gate**
 
 ```bash
 git add src/physics/ src/render/ tests/
 git commit -m "feat: complete Slice 2 with multi-iteration truss relaxation and stress heatmap"
+docker build -t bridge-constructor:latest .
+coolify deploy uuid <app_uuid>
 ```
+**User Inspection Gate:** Provide live URL (`https://bridge.77.42.36.199.sslip.io`) to user. Pause and wait for user's manual inspection and confirmation before proceeding to Task 3.
 
 ---
 
@@ -251,12 +271,15 @@ Expected: FAIL
 Run: `npx vitest run`  
 Expected: All tests PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Commit, Redeploy to Coolify & User Gate**
 
 ```bash
 git add src/physics/Vehicle.ts src/render/VehicleMesh.ts src/game/ tests/
 git commit -m "feat: complete Slice 3 with vehicle collision, weight transfer, and win/loss states"
+docker build -t bridge-constructor:latest .
+coolify deploy uuid <app_uuid>
 ```
+**User Inspection Gate:** Provide live URL (`https://bridge.77.42.36.199.sslip.io`) to user. Pause and wait for user's manual inspection and confirmation before proceeding to Task 4.
 
 ---
 
@@ -318,12 +341,15 @@ Expected: FAIL
 Run: `npx vitest run`  
 Expected: All tests PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Commit, Redeploy to Coolify & User Gate**
 
 ```bash
 git add src/game/ src/ui/ tests/
 git commit -m "feat: complete Slice 4 with build tools, budget limits, undo stack, and 3 levels"
+docker build -t bridge-constructor:latest .
+coolify deploy uuid <app_uuid>
 ```
+**User Inspection Gate:** Provide live URL (`https://bridge.77.42.36.199.sslip.io`) to user. Pause and wait for user's manual inspection and confirmation before proceeding to Task 5.
 
 ---
 
@@ -384,106 +410,14 @@ Run: `npx vitest run`
 Run: `npx vite build`  
 Expected: All tests pass, production bundle is under 200 KB gzipped.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Commit, Final Redeploy to Coolify & Final Review Gate**
 
 ```bash
 git add public/ src/pwa/ src/audio/ vite.config.ts tests/
 git commit -m "feat: complete Slice 5 with PWA service worker, mobile touch controls, and audio polish"
+docker build -t bridge-constructor:latest .
+coolify deploy uuid <app_uuid>
 ```
+**Final User Review Gate:** Provide live URL (`https://bridge.77.42.36.199.sslip.io`) for final full PWA test, offline audit, and final user sign-off.
 
----
-
-### Task 6: Containerization & Coolify Deployment (Server Management)
-
-**Files:**
-- Create: `Dockerfile`
-- Create: `nginx.conf`
-- Create: `docker-compose.yaml`
-- Test: `tests/deploy/HealthCheck.test.ts`
-
-**Interfaces:**
-- Consumes: Production build `dist/` from Task 5.
-- Produces:
-  - Docker container serving static PWA assets on port 80/3000 with gzip compression and correct `application/manifest+json` MIME types.
-  - Deployed application on Hetzner host managed by Coolify with Traefik HTTPS routing.
-
-- [ ] **Step 1: Write Dockerfile and Nginx Configuration**
-
-Create `nginx.conf` with SPA fallback and PWA MIME types:
-```nginx
-server {
-    listen 3000;
-    server_name _;
-    root /usr/share/nginx/html;
-    index index.html;
-
-    # Correct MIME types for PWA
-    location ~* \.webmanifest$ {
-        add_header Content-Type application/manifest+json;
-    }
-
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
-        expires 1y;
-        add_header Cache-Control "public, no-transform";
-    }
-
-    # SPA routing fallback
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
-
-Create multi-stage `Dockerfile`:
-```dockerfile
-FROM node:20-alpine AS build
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
-FROM nginx:alpine
-COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 3000
-CMD ["nginx", "-g", "daemon off;"]
-```
-
-- [ ] **Step 2: Build local Docker image**
-
-Run: `docker build -t bridge-constructor:latest .`  
-Expected: Image builds successfully.
-
-- [ ] **Step 3: Deploy via Coolify CLI & Traefik Configuration**
-
-Follow the `server-management` skill guidelines for local host pre-built images:
-1. Identify Coolify server and project UUIDs:
-   `coolify app list`
-2. Create or configure application in Coolify:
-   `coolify app create dockerimage --server-uuid <server_uuid> --project-uuid <project_uuid> --environment-name production --docker-registry-image-name "bridge-constructor:latest" --ports-exposes 3000`
-3. In `/data/coolify/applications/<app_uuid>/docker-compose.yaml`, ensure `pull_policy: never` is set so Docker uses the local host cache (preventing Docker Hub pull errors).
-4. Assign domain (e.g. `https://bridge.77.42.36.199.sslip.io`):
-   `coolify app update <app_uuid> --domains 'https://bridge.77.42.36.199.sslip.io'`
-5. Deploy:
-   `coolify deploy uuid <app_uuid>`
-
-- [ ] **Step 4: Verify Deployment and HTTPS Health**
-
-Run:
-```bash
-# 1. Local container health
-curl -I http://127.0.0.1:3000
-# 2. Traefik redirection & public HTTPS
-curl -I http://bridge.77.42.36.199.sslip.io
-curl -I https://bridge.77.42.36.199.sslip.io
-```
-Expected: HTTP 307/301 redirect to HTTPS, then HTTP 200 with valid Let's Encrypt certificate.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add Dockerfile nginx.conf docker-compose.yaml
-git commit -m "feat: complete Task 6 with Dockerfile, Nginx PWA config, and Coolify deployment setup"
-```
 
