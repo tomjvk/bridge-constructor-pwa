@@ -94,28 +94,28 @@ Run: `npx vitest run`
 Run: `npx vite build`  
 Expected: All tests PASS, build succeeds without error.
 
-- [ ] **Step 6: Setup Dockerfile, Nginx configuration, and deploy to Coolify**
+- [ ] **Step 6: Register Native Static Site in Coolify & Deploy**
 
-Create `nginx.conf` and multi-stage `Dockerfile`.
-Build local image:
-```bash
-docker build -t bridge-constructor:latest .
-```
-Deploy to Coolify via CLI on the Hetzner host per `server-management` skill:
-1. Find server/project UUIDs via `coolify app list`.
-2. Create/configure application:
-   `coolify app create dockerimage --server-uuid <server_uuid> --project-uuid <project_uuid> --environment-name production --docker-registry-image-name "bridge-constructor:latest" --ports-exposes 3000`
-3. In `/data/coolify/applications/<app_uuid>/docker-compose.yaml`, set `pull_policy: never`.
-4. Set domain: `coolify app update <app_uuid> --domains 'https://bridge.77.42.36.199.sslip.io'`
-5. Deploy: `coolify deploy uuid <app_uuid>`
+Configure Coolify as a Native Static Site (zero-config, no Dockerfile or Nginx needed):
+1. Identify Coolify server and project UUIDs via `coolify app list`.
+2. Create static site application in Coolify:
+   - Base Directory: `/root/projects/bridge-constructor-pwa`
+   - Build Pack: `static`
+   - Publish Directory: `dist`
+   - Install Command: `npm install`
+   - Build Command: `npm run build`
+   - Domain: `https://bridge.77.42.36.199.sslip.io`
+3. Trigger initial deployment:
+   `coolify deploy uuid <app_uuid>`
 
 - [ ] **Step 7: Commit & Manual Verification Gate**
 
 ```bash
-git add package.json tsconfig.json vite.config.ts index.html src/ tests/ Dockerfile nginx.conf
-git commit -m "feat: complete Slice 1 walking skeleton and deploy to Coolify"
+git add package.json tsconfig.json vite.config.ts index.html src/ tests/
+git commit -m "feat: complete Slice 1 walking skeleton and deploy to Coolify static site"
 ```
 **User Inspection Gate:** Provide live URL (`https://bridge.77.42.36.199.sslip.io`) to user. Pause and wait for user's manual inspection and confirmation before proceeding to Task 2.
+
 
 
 ---
@@ -199,7 +199,6 @@ Expected: All tests PASS.
 ```bash
 git add src/physics/ src/render/ tests/
 git commit -m "feat: complete Slice 2 with multi-iteration truss relaxation and stress heatmap"
-docker build -t bridge-constructor:latest .
 coolify deploy uuid <app_uuid>
 ```
 **User Inspection Gate:** Provide live URL (`https://bridge.77.42.36.199.sslip.io`) to user. Pause and wait for user's manual inspection and confirmation before proceeding to Task 3.
@@ -276,7 +275,6 @@ Expected: All tests PASS.
 ```bash
 git add src/physics/Vehicle.ts src/render/VehicleMesh.ts src/game/ tests/
 git commit -m "feat: complete Slice 3 with vehicle collision, weight transfer, and win/loss states"
-docker build -t bridge-constructor:latest .
 coolify deploy uuid <app_uuid>
 ```
 **User Inspection Gate:** Provide live URL (`https://bridge.77.42.36.199.sslip.io`) to user. Pause and wait for user's manual inspection and confirmation before proceeding to Task 4.
@@ -346,7 +344,6 @@ Expected: All tests PASS.
 ```bash
 git add src/game/ src/ui/ tests/
 git commit -m "feat: complete Slice 4 with build tools, budget limits, undo stack, and 3 levels"
-docker build -t bridge-constructor:latest .
 coolify deploy uuid <app_uuid>
 ```
 **User Inspection Gate:** Provide live URL (`https://bridge.77.42.36.199.sslip.io`) to user. Pause and wait for user's manual inspection and confirmation before proceeding to Task 5.
@@ -415,9 +412,9 @@ Expected: All tests pass, production bundle is under 200 KB gzipped.
 ```bash
 git add public/ src/pwa/ src/audio/ vite.config.ts tests/
 git commit -m "feat: complete Slice 5 with PWA service worker, mobile touch controls, and audio polish"
-docker build -t bridge-constructor:latest .
 coolify deploy uuid <app_uuid>
 ```
 **Final User Review Gate:** Provide live URL (`https://bridge.77.42.36.199.sslip.io`) for final full PWA test, offline audit, and final user sign-off.
+
 
 
