@@ -247,3 +247,50 @@ The simulation runs at a fixed timestep $\Delta t = 1/60\text{s}$, subdivided in
   * Verifies landscape layout responsiveness across mobile, tablet, and desktop viewports.
 * **PWA Lighthouse Audit:**
   * Verifies PWA installability criteria, service worker registration, and offline operation.
+
+---
+
+## 10. Vertical Slice Implementation Strategy
+
+To ensure continuous playability, rapid iteration, and immediate kinesthetic validation ("game feel"), the project is built in 5 vertical end-to-end slices:
+
+### Slice 1: The "Walking Skeleton" (First Playable Canvas)
+- **Goal:** Render a 3D scene, connect two fixed anchors with a single road strut, and simulate gravity.
+- **Layers Touched:**
+  - *Math/Physics:* Minimal node integration and single distance constraint.
+  - *Three.js:* Camera, directional light, low-poly cliff anchors, and dynamic 3D cylinder/line strut.
+  - *UI:* Canvas interaction (pointer down/up to place strut) and `[Test / Reset]` button.
+- **Acceptance Criterion:** A player can tap between two anchors to draw a road strut, press Test, and watch it respond to gravity in the browser.
+
+### Slice 2: Truss Networks, Stress Heatmap & Structural Snapping
+- **Goal:** Enable multi-node structural trusses with realistic stiffness and breaking points.
+- **Layers Touched:**
+  - *Math/Physics:* Full PBD relaxation loop ($15\times$ iterations), wood material properties, strain calculation, and strut snap threshold ($\text{stress} \ge 1.0$).
+  - *Three.js:* Dynamic stress color mapping (green $\to$ yellow $\to$ red), node joint spheres, and splinter particle animation on snap.
+  - *UI:* Material toggle (`Road` vs `Wood`).
+- **Acceptance Criterion:** A player can construct a multi-node triangular truss; under its own weight, high-stress beams turn yellow/red and snap if overloaded.
+
+### Slice 3: Vehicle Simulation & Win/Loss Game Loop
+- **Goal:** Drive a vehicle across the bridge with real-time mass transfer, leading to victory or collapse.
+- **Layers Touched:**
+  - *Math/Physics:* 2-axle vehicle model with motor drive, gravity, and circle-to-segment wheel collision on active road struts.
+  - *Three.js:* Low-poly procedural car model following 2D vehicle coordinates/angles.
+  - *UI:* Simulation state manager with Victory banner (car crosses finish line) and Collapse/Retry banner (car drops below river line $Y < -1.0\text{m}$).
+- **Acceptance Criterion:** A car drives across the constructed bridge; if the bridge holds, the player wins; if beams break, the car plunges and the player can immediately edit/retry.
+
+### Slice 4: Full Build Tools, Budget System & 3 Levels
+- **Goal:** Complete puzzle mechanics, budget constraints, and level progression.
+- **Layers Touched:**
+  - *Math/Physics:* Level loader parsing anchor points, gap distance, vehicle specs, and budget limits.
+  - *UI/HUD:* Real-time budget spent vs. max budget counter, Delete/Eraser tool, Undo stack, and Level Selector modal (Levels 1, 2, and 3).
+  - *Storage:* Save unlocked levels and star ratings to `localStorage`.
+- **Acceptance Criterion:** Players can play through Levels 1, 2, and 3, using Undo, Delete, and budget limits to earn 1 to 3 stars per level.
+
+### Slice 5: PWA, Touch Gestures & Polish
+- **Goal:** Full offline installability and mobile refinement.
+- **Layers Touched:**
+  - *PWA:* `vite-plugin-pwa` generating `manifest.webmanifest` and service worker caching strategy.
+  - *Input:* Mobile pinch-zoom, two-finger pan, and smooth touch-drawing.
+  - *Visual & Audio Polish:* Stylized animated water shader, ambient river/cliff background, and Web Audio sound effects (creak, snap, engine).
+- **Acceptance Criterion:** App passes PWA audit, installs to desktop/mobile home screen, and works 100% offline.
+
