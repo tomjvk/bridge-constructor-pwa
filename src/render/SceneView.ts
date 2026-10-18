@@ -3,10 +3,12 @@ import { Vector2 } from '../physics/Vector2';
 import { MaterialType, MATERIALS } from '../physics/Materials';
 import { Node, Strut, stepSimulation } from '../physics/PBD';
 import { createStrutMesh, updateStrutColor, ParticleSystem } from './StrutMesh';
+import { VehicleMesh } from './VehicleMesh';
+import { GameLoop, GameStatus } from '../game/GameLoop';
 
 export interface SceneConfig {
   container: HTMLElement;
-  onStatusChange?: (status: string) => void;
+  onStatusChange?: (status: GameStatus) => void;
   onStatsChange?: (stats: { nodeCount: number; strutCount: number; cost: number }) => void;
 }
 
@@ -30,19 +32,26 @@ export class SceneView {
   private strutMeshes: Map<string, THREE.Mesh> = new Map();
   private ghostStrutMesh!: THREE.Mesh;
   private particleSystem!: ParticleSystem;
+  private vehicleMesh!: VehicleMesh;
+  private gridHelper!: THREE.GridHelper;
 
-  // Interaction state
+  // Interaction & Game state
+  public gameLoop: GameLoop;
   private isPointerDown = false;
   private activeStartNode: Node | null = null;
-  public isSimulating = false;
   public activeMaterial: MaterialType = 'road';
-  private onStatusChange?: (status: string) => void;
+  private onStatusChange?: (status: GameStatus) => void;
   private onStatsChange?: (stats: { nodeCount: number; strutCount: number; cost: number }) => void;
 
   constructor(config: SceneConfig) {
     this.container = config.container;
     this.onStatusChange = config.onStatusChange;
     this.onStatsChange = config.onStatsChange;
+
+    this.gameLoop = new GameLoop({
+      onStatusChange: (status) => this.onStatusChange?.(status),
+    });
+
     this.initScene();
     this.initDefaultAnchors();
     this.setupEventListeners();
@@ -56,7 +65,7 @@ export class SceneView {
     const height = this.container.clientHeight;
     const aspect = width / height;
 
-    const viewHeight = 6;
+    const viewHeight = 7;
     const viewWidth = viewHeight * aspect;
 
     this.camera = new THREE.OrthographicCamera(
@@ -86,8 +95,15 @@ export class SceneView {
     dirLight.position.set(5, 10, 15);
     this.scene.add(dirLight);
 
+    // 1.0m Construction Grid
+    this.buildGrid();
+
     // Environment
     this.buildCliffsAndWater();
+
+    // Vehicle 3D Mesh
+    this.vehicleMesh = new VehicleMesh();
+    this.scene.add(this.vehicleMesh.group);
 
     // Particle system for splinter effects
     this.particleSystem = new ParticleSystem(this.scene);
@@ -105,21 +121,30 @@ export class SceneView {
     this.scene.add(this.ghostStrutMesh);
   }
 
+  private buildGrid(): void {
+    // 20m x 10m grid with 1.0m spacing on Z = -0.05 (just behind bridge plane)
+    this.gridHelper = new THREE.GridHelper(20, 20, 0x38bdf8, 0x1e293b);
+    this.gridHelper.rotation.x = Math.PI / 2;
+    this.gridHelper.position.set(3.5, 1.5, -0.05);
+    this.scene.add(this.gridHelper);
+  }
+
   private buildCliffsAndWater(): void {
-    // Left Cliff (X <= 0)
     const cliffMat = new THREE.MeshStandardMaterial({
       color: 0x334155,
       roughness: 0.8,
     });
+    const grassMat = new THREE.MeshStandardMaterial({
+      color: 0x15803d,
+      roughness: 0.6,
+    });
+
+    // Left Cliff (X <= 0)
     const leftCliffGeom = new THREE.BoxGeometry(6, 6, 2);
     const leftCliff = new THREE.Mesh(leftCliffGeom, cliffMat);
     leftCliff.position.set(-3, 0, 0);
     this.scene.add(leftCliff);
 
-    const grassMat = new THREE.MeshStandardMaterial({
-      color: 0x15803d,
-      roughness: 0.6,
-    });
     const leftGrassGeom = new THREE.BoxGeometry(6, 0.3, 2.2);
     const leftGrass = new THREE.Mesh(leftGrassGeom, grassMat);
     leftGrass.position.set(-3, 2.15, 0);
@@ -153,10 +178,16 @@ export class SceneView {
 
   private initDefaultAnchors(): void {
     const anchors: Node[] = [
-      { id: 'anchor_L1', pos: new Vector2(0, 2.0), prevPos: new Vector2(0, 2.0), isAnchor: true, mass: 100 },
-      { id: 'anchor_L2', pos: new Vector2(0, 0.5), prevPos: new Vector2(0, 0.5), isAnchor: true, mass: 100 },
-      { id: 'anchor_R1', pos: new Vector2(7, 2.0), prevPos: new Vector2(7, 2.0), isAnchor: true, mass: 100 },
-      { id: 'anchor_R2', pos: new Vector2(7, 0.5), prevPos: new Vector2(7, 0.5), isAnchor: true, mass: 100 },
+      // Approach road node on left cliff
+      { id: 'anchor_approach_L', pos: new Vector2(-2.5, 2.0), prevPos: new Vector2(-2.5, 2.0), isAnchor: true, mass: 1000 },
+      // Left cliff edge anchors
+      { id: 'anchor_L1', pos: new Vector2(0, 2.0), prevPos: new Vector2(0, 2.0), isAnchor: true, mass: 1000 },
+      { id: 'anchor_L2', pos: new Vector2(0, 0.5), prevPos: new Vector2(0, 0.5), isAnchor: true, mass: 1000 },
+      // Right cliff edge anchors
+      { id: 'anchor_R1', pos: new Vector2(7, 2.0), prevPos: new Vector2(7, 2.0), isAnchor: true, mass: 1000 },
+      { id: 'anchor_R2', pos: new Vector2(7, 0.5), prevPos: new Vector2(7, 0.5), isAnchor: true, mass: 1000 },
+      // Landing road node on right cliff
+      { id: 'anchor_landing_R', pos: new Vector2(9.5, 2.0), prevPos: new Vector2(9.5, 2.0), isAnchor: true, mass: 1000 },
     ];
 
     for (const a of anchors) {
@@ -164,6 +195,10 @@ export class SceneView {
       this.initialNodePositions.set(a.id, a.pos.clone());
       this.createNodeMesh(a);
     }
+
+    // Connect approach road on left cliff and landing on right cliff
+    this.addStrut(this.nodes.get('anchor_approach_L')!, this.nodes.get('anchor_L1')!, 'road');
+    this.addStrut(this.nodes.get('anchor_R1')!, this.nodes.get('anchor_landing_R')!, 'road');
   }
 
   private createNodeMesh(node: Node): THREE.Mesh {
@@ -212,14 +247,12 @@ export class SceneView {
     const up = new THREE.Vector3(0, 1, 0);
     mesh.quaternion.setFromUnitVectors(up, dir.clone().normalize());
 
-    // Update stress color in simulation mode
-    if (this.isSimulating && strut.stress !== undefined) {
+    if (this.gameLoop.status === 'simulating' && strut.stress !== undefined) {
       updateStrutColor(mesh, strut.stress);
     }
   }
 
   public addStrut(nodeA: Node, nodeB: Node, material: MaterialType = this.activeMaterial): Strut | null {
-    // Check if strut already exists
     const exists = this.struts.some(
       s => (s.nodeAId === nodeA.id && s.nodeBId === nodeB.id) ||
            (s.nodeAId === nodeB.id && s.nodeBId === nodeA.id)
@@ -230,7 +263,7 @@ export class SceneView {
     const matProps = MATERIALS[material];
 
     if (length > matProps.maxLength) {
-      return null; // Exceeds material max length
+      return null;
     }
 
     const strut: Strut = {
@@ -253,6 +286,8 @@ export class SceneView {
   public calculateTotalCost(): number {
     let cost = 0;
     for (const s of this.struts) {
+      // Don't charge for fixed approach roads
+      if (s.nodeAId.includes('approach') || s.nodeBId.includes('landing')) continue;
       const mat = MATERIALS[s.material];
       cost += s.restLength * mat.costPerMeter;
     }
@@ -260,9 +295,10 @@ export class SceneView {
   }
 
   private emitStats(): void {
+    const userStruts = this.struts.filter(s => !s.nodeAId.includes('approach') && !s.nodeBId.includes('landing'));
     this.onStatsChange?.({
       nodeCount: this.nodes.size,
-      strutCount: this.struts.filter(s => !s.isBroken).length,
+      strutCount: userStruts.filter(s => !s.isBroken).length,
       cost: this.calculateTotalCost(),
     });
   }
@@ -279,6 +315,14 @@ export class SceneView {
       }
     }
     return nearest;
+  }
+
+  // Snaps to 0.5m grid
+  private snapToGrid(pos: Vector2): Vector2 {
+    return new Vector2(
+      Math.round(pos.x * 2) / 2,
+      Math.round(pos.y * 2) / 2
+    );
   }
 
   private getPlaneIntersection(event: PointerEvent): Vector2 | null {
@@ -299,7 +343,7 @@ export class SceneView {
     const canvas = this.renderer.domElement;
 
     canvas.addEventListener('pointerdown', (e) => {
-      if (this.isSimulating) return;
+      if (this.gameLoop.status === 'simulating') return;
       const worldPos = this.getPlaneIntersection(e);
       if (!worldPos) return;
 
@@ -311,13 +355,17 @@ export class SceneView {
     });
 
     window.addEventListener('pointermove', (e) => {
-      if (!this.isPointerDown || !this.activeStartNode || this.isSimulating) return;
-      const worldPos = this.getPlaneIntersection(e);
-      if (!worldPos) return;
+      if (!this.isPointerDown || !this.activeStartNode || this.gameLoop.status === 'simulating') return;
+      const rawPos = this.getPlaneIntersection(e);
+      if (!rawPos) return;
+
+      // Snap preview to existing node if nearby, otherwise snap to 0.5m grid
+      const nearestNode = this.findNearestNode(rawPos, 0.4);
+      const targetPos = nearestNode ? nearestNode.pos : this.snapToGrid(rawPos);
 
       const matProps = MATERIALS[this.activeMaterial];
       const pA = new THREE.Vector3(this.activeStartNode.pos.x, this.activeStartNode.pos.y, 0);
-      const pB = new THREE.Vector3(worldPos.x, worldPos.y, 0);
+      const pB = new THREE.Vector3(targetPos.x, targetPos.y, 0);
       const mid = new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5);
       const dir = new THREE.Vector3().subVectors(pB, pA);
       const len = dir.length();
@@ -326,7 +374,6 @@ export class SceneView {
       this.ghostStrutMesh.scale.set(1, Math.max(len, 0.001), 1);
       this.ghostStrutMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
 
-      // Turn ghost red if exceeding material max length
       const ghostMat = this.ghostStrutMesh.material as THREE.MeshBasicMaterial;
       if (len > matProps.maxLength) {
         ghostMat.color.setHex(0xef4444);
@@ -338,7 +385,7 @@ export class SceneView {
     });
 
     window.addEventListener('pointerup', (e) => {
-      if (!this.isPointerDown || !this.activeStartNode || this.isSimulating) {
+      if (!this.isPointerDown || !this.activeStartNode || this.gameLoop.status === 'simulating') {
         this.isPointerDown = false;
         this.activeStartNode = null;
         this.ghostStrutMesh.visible = false;
@@ -348,25 +395,26 @@ export class SceneView {
       this.isPointerDown = false;
       this.ghostStrutMesh.visible = false;
 
-      const worldPos = this.getPlaneIntersection(e);
-      if (!worldPos) {
+      const rawPos = this.getPlaneIntersection(e);
+      if (!rawPos) {
         this.activeStartNode = null;
         return;
       }
 
-      let endNode = this.findNearestNode(worldPos, 0.4);
+      let endNode = this.findNearestNode(rawPos, 0.4);
       const matProps = MATERIALS[this.activeMaterial];
 
       if (!endNode) {
-        const dist = this.activeStartNode.pos.distanceTo(worldPos);
+        const snappedPos = this.snapToGrid(rawPos);
+        const dist = this.activeStartNode.pos.distanceTo(snappedPos);
         if (dist > 0.3 && dist <= matProps.maxLength) {
           const newNodeId = `node_${Date.now()}`;
           endNode = {
             id: newNodeId,
-            pos: worldPos.clone(),
-            prevPos: worldPos.clone(),
+            pos: snappedPos.clone(),
+            prevPos: snappedPos.clone(),
             isAnchor: false,
-            mass: 10,
+            mass: 15,
           };
           this.nodes.set(endNode.id, endNode);
           this.initialNodePositions.set(endNode.id, endNode.pos.clone());
@@ -385,7 +433,7 @@ export class SceneView {
       const width = this.container.clientWidth;
       const height = this.container.clientHeight;
       const aspect = width / height;
-      const viewHeight = 6;
+      const viewHeight = 7;
       const viewWidth = viewHeight * aspect;
 
       this.camera.left = -viewWidth / 2;
@@ -403,9 +451,7 @@ export class SceneView {
   }
 
   public toggleSimulation(): boolean {
-    this.isSimulating = !this.isSimulating;
-
-    if (this.isSimulating) {
+    if (this.gameLoop.status === 'building') {
       this.brokenStrutIds.clear();
       for (const [id, node] of this.nodes) {
         this.initialNodePositions.set(id, node.pos.clone());
@@ -415,35 +461,52 @@ export class SceneView {
         s.isBroken = false;
         s.stress = 0;
       }
-      this.onStatusChange?.('Simulating');
+      this.gameLoop.startSimulation(-1.5, 2.3, 7.5);
+      this.vehicleMesh.setVisible(true);
+      return true;
     } else {
-      this.particleSystem.clear();
-      for (const [id, initialPos] of this.initialNodePositions) {
-        const node = this.nodes.get(id);
-        if (node) {
-          node.pos.copy(initialPos);
-          node.prevPos.copy(initialPos);
-        }
+      this.resetSimulation();
+      return false;
+    }
+  }
+
+  public resetSimulation(): void {
+    this.gameLoop.reset();
+    this.vehicleMesh.setVisible(false);
+    this.particleSystem.clear();
+
+    for (const [id, initialPos] of this.initialNodePositions) {
+      const node = this.nodes.get(id);
+      if (node) {
+        node.pos.copy(initialPos);
+        node.prevPos.copy(initialPos);
       }
-      for (const s of this.struts) {
-        s.isBroken = false;
-        s.stress = 0;
-        const mesh = this.strutMeshes.get(s.id);
-        if (mesh) {
-          mesh.visible = true;
-          const isRoad = s.material === 'road';
-          (mesh.material as THREE.MeshStandardMaterial).color.setHex(isRoad ? 0x475569 : 0xca8a04);
-        }
-      }
-      this.syncMeshes();
-      this.onStatusChange?.('Build Mode');
     }
 
-    return this.isSimulating;
+    for (const s of this.struts) {
+      s.isBroken = false;
+      s.stress = 0;
+      const mesh = this.strutMeshes.get(s.id);
+      if (mesh) {
+        mesh.visible = true;
+        const isRoad = s.material === 'road';
+        (mesh.material as THREE.MeshStandardMaterial).color.setHex(isRoad ? 0x475569 : 0xca8a04);
+      }
+    }
+
+    this.syncMeshes();
   }
 
   private stepPhysics(dt: number): void {
     stepSimulation(this.nodes, this.struts, 15, dt);
+
+    // Update vehicle simulation and wheel interactions
+    const roadStruts = this.struts.filter(s => s.material === 'road');
+    this.gameLoop.update(roadStruts, this.nodes, dt);
+
+    if (this.gameLoop.vehicle) {
+      this.vehicleMesh.update(this.gameLoop.vehicle, dt);
+    }
 
     // Check for newly broken struts to trigger splinter particles
     for (const strut of this.struts) {
@@ -480,7 +543,7 @@ export class SceneView {
 
   private animate(): void {
     requestAnimationFrame(this.animate);
-    if (this.isSimulating) {
+    if (this.gameLoop.status === 'simulating') {
       this.stepPhysics(1 / 60);
     } else {
       this.particleSystem.update(1 / 60);

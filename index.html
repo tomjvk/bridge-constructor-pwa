@@ -42,7 +42,7 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        background: rgba(20, 24, 33, 0.85);
+        background: rgba(20, 24, 33, 0.88);
         backdrop-filter: blur(8px);
         padding: 10px 18px;
         border-radius: 12px;
@@ -55,6 +55,14 @@
         font-size: 1.15rem;
         letter-spacing: 0.5px;
         color: #38bdf8;
+      }
+      .instructions {
+        font-size: 0.85rem;
+        color: #cbd5e1;
+        background: rgba(15, 23, 42, 0.6);
+        padding: 6px 12px;
+        border-radius: 6px;
+        border-left: 3px solid #38bdf8;
       }
       .hud-stats {
         display: flex;
@@ -78,7 +86,7 @@
       .tool-bar {
         display: flex;
         gap: 10px;
-        background: rgba(20, 24, 33, 0.85);
+        background: rgba(20, 24, 33, 0.88);
         backdrop-filter: blur(8px);
         padding: 8px 12px;
         border-radius: 12px;
@@ -121,6 +129,12 @@
       .btn-warning:hover {
         background: #b45309;
       }
+      .btn-danger {
+        background: #dc2626;
+      }
+      .btn-danger:hover {
+        background: #b91c1c;
+      }
       .legend {
         display: flex;
         align-items: center;
@@ -138,13 +152,61 @@
         border-radius: 4px;
         background: linear-gradient(to right, #22c55e, #eab308, #ef4444);
       }
+
+      /* Modal Banners */
+      .banner-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(10, 15, 25, 0.7);
+        backdrop-filter: blur(4px);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        pointer-events: auto;
+        z-index: 100;
+      }
+      .banner-modal {
+        background: #1e293b;
+        border-radius: 16px;
+        padding: 32px 40px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+        border: 2px solid #334155;
+        max-width: 420px;
+        animation: popIn 0.25s ease-out;
+      }
+      @keyframes popIn {
+        from { transform: scale(0.9); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+      }
+      .banner-modal h2 {
+        font-size: 1.8rem;
+        margin-bottom: 12px;
+      }
+      .banner-modal p {
+        color: #94a3b8;
+        font-size: 1rem;
+        margin-bottom: 24px;
+        line-height: 1.5;
+      }
+      .banner-win h2 {
+        color: #4ade80;
+      }
+      .banner-loss h2 {
+        color: #f87171;
+      }
     </style>
   </head>
   <body>
     <div id="canvas-container"></div>
     <div id="ui-overlay">
       <div class="hud-header">
-        <div class="hud-title">🌉 Bridge Constructor (Slice 2: Trusses & Stress)</div>
+        <div class="hud-title">🌉 Bridge Constructor (Slice 3: Vehicle Simulation)</div>
+        <div class="instructions">Drag short segments (snaps to 0.5m grid) across the 7m gap. Connect with Wood trusses!</div>
         <div class="hud-stats">
           <div>Status: <span id="sim-status">Build Mode</span></div>
           <div>Struts: <span id="stat-struts">0</span></div>
@@ -166,6 +228,25 @@
         </div>
       </div>
     </div>
+
+    <!-- Win Banner Overlay -->
+    <div id="win-overlay" class="banner-overlay banner-win">
+      <div class="banner-modal">
+        <h2>🎉 Level Complete!</h2>
+        <p>Your bridge held strong and the vehicle safely crossed the chasm!</p>
+        <button id="btn-win-replay" class="btn btn-success" style="width: 100%; padding: 14px;">▶ Replay / Edit Bridge</button>
+      </div>
+    </div>
+
+    <!-- Loss Banner Overlay -->
+    <div id="loss-overlay" class="banner-overlay banner-loss">
+      <div class="banner-modal">
+        <h2>💥 Bridge Collapsed!</h2>
+        <p>The bridge could not withstand the vehicle's weight and snapped under tension.</p>
+        <button id="btn-loss-retry" class="btn btn-warning" style="width: 100%; padding: 14px;">🔄 Strengthen & Retry</button>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

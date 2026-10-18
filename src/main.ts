@@ -1,5 +1,6 @@
 import { SceneView } from './render/SceneView';
 import { MaterialType } from './physics/Materials';
+import { GameStatus } from './game/GameLoop';
 
 document.addEventListener('DOMContentLoaded', () => {
   const container = document.getElementById('canvas-container');
@@ -11,16 +12,52 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnRoad = document.getElementById('btn-road') as HTMLButtonElement | null;
   const btnWood = document.getElementById('btn-wood') as HTMLButtonElement | null;
 
+  const winOverlay = document.getElementById('win-overlay');
+  const lossOverlay = document.getElementById('loss-overlay');
+  const btnWinReplay = document.getElementById('btn-win-replay');
+  const btnLossRetry = document.getElementById('btn-loss-retry');
+
   if (!container) return;
+
+  const updateStatusUI = (status: GameStatus) => {
+    if (!statusEl) return;
+    switch (status) {
+      case 'building':
+        statusEl.textContent = 'Build Mode';
+        statusEl.style.color = '#22c55e';
+        if (btnToggle) {
+          btnToggle.textContent = '▶ Test Bridge';
+          btnToggle.className = 'btn btn-success';
+        }
+        if (winOverlay) winOverlay.style.display = 'none';
+        if (lossOverlay) lossOverlay.style.display = 'none';
+        break;
+      case 'simulating':
+        statusEl.textContent = 'Vehicle Driving...';
+        statusEl.style.color = '#eab308';
+        if (btnToggle) {
+          btnToggle.textContent = '⏹ Reset Simulation';
+          btnToggle.className = 'btn btn-warning';
+        }
+        if (winOverlay) winOverlay.style.display = 'none';
+        if (lossOverlay) lossOverlay.style.display = 'none';
+        break;
+      case 'won':
+        statusEl.textContent = 'Victory!';
+        statusEl.style.color = '#4ade80';
+        if (winOverlay) winOverlay.style.display = 'flex';
+        break;
+      case 'lost':
+        statusEl.textContent = 'Bridge Collapsed!';
+        statusEl.style.color = '#f87171';
+        if (lossOverlay) lossOverlay.style.display = 'flex';
+        break;
+    }
+  };
 
   const sceneView = new SceneView({
     container,
-    onStatusChange: (status) => {
-      if (statusEl) {
-        statusEl.textContent = status;
-        statusEl.style.color = status === 'Simulating' ? '#eab308' : '#22c55e';
-      }
-    },
+    onStatusChange: (status) => updateStatusUI(status),
     onStatsChange: (stats) => {
       if (strutsEl) strutsEl.textContent = stats.strutCount.toString();
       if (costEl) costEl.textContent = `$${stats.cost.toLocaleString()}`;
@@ -43,14 +80,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (btnToggle) {
     btnToggle.addEventListener('click', () => {
-      const isSimulating = sceneView.toggleSimulation();
-      if (isSimulating) {
-        btnToggle.textContent = '⏹ Reset Simulation';
-        btnToggle.className = 'btn btn-warning';
-      } else {
-        btnToggle.textContent = '▶ Test Bridge';
-        btnToggle.className = 'btn btn-success';
-      }
+      sceneView.toggleSimulation();
     });
   }
+
+  btnWinReplay?.addEventListener('click', () => {
+    sceneView.resetSimulation();
+  });
+
+  btnLossRetry?.addEventListener('click', () => {
+    sceneView.resetSimulation();
+  });
 });
