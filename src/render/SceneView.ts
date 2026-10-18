@@ -61,11 +61,11 @@ export class SceneView {
   }
 
   private initScene(): void {
-    const width = this.container.clientWidth;
-    const height = this.container.clientHeight;
+    const width = this.container.clientWidth || window.innerWidth || 800;
+    const height = this.container.clientHeight || window.innerHeight || 600;
     const aspect = width / height;
 
-    const viewHeight = 7;
+    const viewHeight = 7.5;
     const viewWidth = viewHeight * aspect;
 
     this.camera = new THREE.OrthographicCamera(
@@ -80,25 +80,25 @@ export class SceneView {
     this.camera.lookAt(3.5, 1.5, 0);
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x181e2b);
+    this.scene.background = new THREE.Color(0x111827); // Deep modern dark slate
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.container.appendChild(this.renderer.domElement);
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
     this.scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
     dirLight.position.set(5, 10, 15);
     this.scene.add(dirLight);
 
-    // 1.0m Construction Grid
+    // 1.0m Construction Grid (just behind construction plane)
     this.buildGrid();
 
-    // Environment
+    // Environment: Cliffs in background behind bridge
     this.buildCliffsAndWater();
 
     // Vehicle 3D Mesh
@@ -113,7 +113,7 @@ export class SceneView {
     const ghostMat = new THREE.MeshBasicMaterial({
       color: 0x38bdf8,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.7,
       wireframe: true,
     });
     this.ghostStrutMesh = new THREE.Mesh(ghostGeom, ghostMat);
@@ -122,72 +122,75 @@ export class SceneView {
   }
 
   private buildGrid(): void {
-    // 20m x 10m grid with 1.0m spacing on Z = -0.05 (just behind bridge plane)
-    this.gridHelper = new THREE.GridHelper(20, 20, 0x38bdf8, 0x1e293b);
+    // 24m x 12m grid with 1.0m spacing at Z = -0.02
+    this.gridHelper = new THREE.GridHelper(24, 24, 0x0284c7, 0x1e293b);
     this.gridHelper.rotation.x = Math.PI / 2;
-    this.gridHelper.position.set(3.5, 1.5, -0.05);
+    this.gridHelper.position.set(3.5, 1.5, -0.02);
     this.scene.add(this.gridHelper);
   }
 
   private buildCliffsAndWater(): void {
     const cliffMat = new THREE.MeshStandardMaterial({
       color: 0x334155,
-      roughness: 0.8,
+      roughness: 0.9,
     });
     const grassMat = new THREE.MeshStandardMaterial({
       color: 0x15803d,
-      roughness: 0.6,
+      roughness: 0.7,
     });
 
-    // Left Cliff (X <= 0)
-    const leftCliffGeom = new THREE.BoxGeometry(6, 6, 2);
+    // Left Cliff: positioned behind bridge at Z = -0.6 with depth 1.0
+    // Front face sits at Z = -0.1, so joints at Z = 0 pop out clearly!
+    const leftCliffGeom = new THREE.BoxGeometry(7, 5, 1.0);
     const leftCliff = new THREE.Mesh(leftCliffGeom, cliffMat);
-    leftCliff.position.set(-3, 0, 0);
+    leftCliff.position.set(-3.5, -0.5, -0.6);
     this.scene.add(leftCliff);
 
-    const leftGrassGeom = new THREE.BoxGeometry(6, 0.3, 2.2);
+    // Left Grass Top (flush with bridge deck at Y = 2.0)
+    const leftGrassGeom = new THREE.BoxGeometry(7, 0.2, 1.1);
     const leftGrass = new THREE.Mesh(leftGrassGeom, grassMat);
-    leftGrass.position.set(-3, 2.15, 0);
+    leftGrass.position.set(-3.5, 1.9, -0.6);
     this.scene.add(leftGrass);
 
-    // Right Cliff (X >= 7)
-    const rightCliffGeom = new THREE.BoxGeometry(6, 6, 2);
+    // Right Cliff: positioned behind bridge at Z = -0.6 with depth 1.0
+    const rightCliffGeom = new THREE.BoxGeometry(7, 5, 1.0);
     const rightCliff = new THREE.Mesh(rightCliffGeom, cliffMat);
-    rightCliff.position.set(10, 0, 0);
+    rightCliff.position.set(10.5, -0.5, -0.6);
     this.scene.add(rightCliff);
 
-    const rightGrassGeom = new THREE.BoxGeometry(6, 0.3, 2.2);
+    // Right Grass Top
+    const rightGrassGeom = new THREE.BoxGeometry(7, 0.2, 1.1);
     const rightGrass = new THREE.Mesh(rightGrassGeom, grassMat);
-    rightGrass.position.set(10, 2.15, 0);
+    rightGrass.position.set(10.5, 1.9, -0.6);
     this.scene.add(rightGrass);
 
-    // River / Water plane
-    const waterGeom = new THREE.PlaneGeometry(30, 8);
+    // River / Water plane at bottom
+    const waterGeom = new THREE.PlaneGeometry(32, 8);
     const waterMat = new THREE.MeshStandardMaterial({
       color: 0x0284c7,
-      roughness: 0.2,
-      metalness: 0.1,
+      roughness: 0.1,
+      metalness: 0.2,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.85,
     });
     const water = new THREE.Mesh(waterGeom, waterMat);
     water.rotation.x = -Math.PI / 2;
-    water.position.set(3.5, -1.5, 0);
+    water.position.set(3.5, -1.8, -0.2);
     this.scene.add(water);
   }
 
   private initDefaultAnchors(): void {
     const anchors: Node[] = [
-      // Approach road node on left cliff
-      { id: 'anchor_approach_L', pos: new Vector2(-2.5, 2.0), prevPos: new Vector2(-2.5, 2.0), isAnchor: true, mass: 1000 },
-      // Left cliff edge anchors
+      // Left cliff approach road anchor (within 1.8m <= 2.0m max length)
+      { id: 'anchor_approach_L', pos: new Vector2(-1.8, 2.0), prevPos: new Vector2(-1.8, 2.0), isAnchor: true, mass: 1000 },
+      // Left cliff edge anchors (glowing yellow)
       { id: 'anchor_L1', pos: new Vector2(0, 2.0), prevPos: new Vector2(0, 2.0), isAnchor: true, mass: 1000 },
       { id: 'anchor_L2', pos: new Vector2(0, 0.5), prevPos: new Vector2(0, 0.5), isAnchor: true, mass: 1000 },
-      // Right cliff edge anchors
+      // Right cliff edge anchors (glowing yellow)
       { id: 'anchor_R1', pos: new Vector2(7, 2.0), prevPos: new Vector2(7, 2.0), isAnchor: true, mass: 1000 },
       { id: 'anchor_R2', pos: new Vector2(7, 0.5), prevPos: new Vector2(7, 0.5), isAnchor: true, mass: 1000 },
-      // Landing road node on right cliff
-      { id: 'anchor_landing_R', pos: new Vector2(9.5, 2.0), prevPos: new Vector2(9.5, 2.0), isAnchor: true, mass: 1000 },
+      // Right cliff landing road anchor (within 1.8m <= 2.0m max length)
+      { id: 'anchor_landing_R', pos: new Vector2(8.8, 2.0), prevPos: new Vector2(8.8, 2.0), isAnchor: true, mass: 1000 },
     ];
 
     for (const a of anchors) {
@@ -202,14 +205,17 @@ export class SceneView {
   }
 
   private createNodeMesh(node: Node): THREE.Mesh {
-    const geom = new THREE.SphereGeometry(node.isAnchor ? 0.14 : 0.1, 16, 16);
+    const radius = node.isAnchor ? 0.18 : 0.12;
+    const geom = new THREE.SphereGeometry(radius, 16, 16);
     const mat = new THREE.MeshStandardMaterial({
-      color: node.isAnchor ? 0xf59e0b : 0xe2e8f0,
-      metalness: 0.3,
-      roughness: 0.4,
+      color: node.isAnchor ? 0xf59e0b : 0xf8fafc,
+      emissive: node.isAnchor ? 0xd97706 : 0x000000,
+      emissiveIntensity: node.isAnchor ? 0.35 : 0,
+      metalness: 0.2,
+      roughness: 0.3,
     });
     const mesh = new THREE.Mesh(geom, mat);
-    mesh.position.set(node.pos.x, node.pos.y, 0);
+    mesh.position.set(node.pos.x, node.pos.y, 0.05);
     this.scene.add(mesh);
     this.nodeMeshes.set(node.id, mesh);
     return mesh;
@@ -235,8 +241,8 @@ export class SceneView {
     }
 
     mesh.visible = true;
-    const pA = new THREE.Vector3(nodeA.pos.x, nodeA.pos.y, 0);
-    const pB = new THREE.Vector3(nodeB.pos.x, nodeB.pos.y, 0);
+    const pA = new THREE.Vector3(nodeA.pos.x, nodeA.pos.y, 0.05);
+    const pB = new THREE.Vector3(nodeB.pos.x, nodeB.pos.y, 0.05);
     const mid = new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5);
     const dir = new THREE.Vector3().subVectors(pB, pA);
     const len = dir.length();
@@ -286,7 +292,6 @@ export class SceneView {
   public calculateTotalCost(): number {
     let cost = 0;
     for (const s of this.struts) {
-      // Don't charge for fixed approach roads
       if (s.nodeAId.includes('approach') || s.nodeBId.includes('landing')) continue;
       const mat = MATERIALS[s.material];
       cost += s.restLength * mat.costPerMeter;
@@ -317,7 +322,6 @@ export class SceneView {
     return nearest;
   }
 
-  // Snaps to 0.5m grid
   private snapToGrid(pos: Vector2): Vector2 {
     return new Vector2(
       Math.round(pos.x * 2) / 2,
@@ -359,13 +363,12 @@ export class SceneView {
       const rawPos = this.getPlaneIntersection(e);
       if (!rawPos) return;
 
-      // Snap preview to existing node if nearby, otherwise snap to 0.5m grid
       const nearestNode = this.findNearestNode(rawPos, 0.4);
       const targetPos = nearestNode ? nearestNode.pos : this.snapToGrid(rawPos);
 
       const matProps = MATERIALS[this.activeMaterial];
-      const pA = new THREE.Vector3(this.activeStartNode.pos.x, this.activeStartNode.pos.y, 0);
-      const pB = new THREE.Vector3(targetPos.x, targetPos.y, 0);
+      const pA = new THREE.Vector3(this.activeStartNode.pos.x, this.activeStartNode.pos.y, 0.05);
+      const pB = new THREE.Vector3(targetPos.x, targetPos.y, 0.05);
       const mid = new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5);
       const dir = new THREE.Vector3().subVectors(pB, pA);
       const len = dir.length();
@@ -430,10 +433,10 @@ export class SceneView {
     });
 
     window.addEventListener('resize', () => {
-      const width = this.container.clientWidth;
-      const height = this.container.clientHeight;
+      const width = this.container.clientWidth || window.innerWidth;
+      const height = this.container.clientHeight || window.innerHeight;
       const aspect = width / height;
-      const viewHeight = 7;
+      const viewHeight = 7.5;
       const viewWidth = viewHeight * aspect;
 
       this.camera.left = -viewWidth / 2;
@@ -500,7 +503,6 @@ export class SceneView {
   private stepPhysics(dt: number): void {
     stepSimulation(this.nodes, this.struts, 15, dt);
 
-    // Update vehicle simulation and wheel interactions
     const roadStruts = this.struts.filter(s => s.material === 'road');
     this.gameLoop.update(roadStruts, this.nodes, dt);
 
@@ -508,7 +510,6 @@ export class SceneView {
       this.vehicleMesh.update(this.gameLoop.vehicle, dt);
     }
 
-    // Check for newly broken struts to trigger splinter particles
     for (const strut of this.struts) {
       if (strut.isBroken && !this.brokenStrutIds.has(strut.id)) {
         this.brokenStrutIds.add(strut.id);
@@ -518,7 +519,7 @@ export class SceneView {
           const mid = new THREE.Vector3(
             (nodeA.pos.x + nodeB.pos.x) * 0.5,
             (nodeA.pos.y + nodeB.pos.y) * 0.5,
-            0
+            0.05
           );
           this.particleSystem.spawnSplinters(mid, 14, strut.material);
         }
@@ -533,7 +534,7 @@ export class SceneView {
     for (const [id, node] of this.nodes) {
       const mesh = this.nodeMeshes.get(id);
       if (mesh) {
-        mesh.position.set(node.pos.x, node.pos.y, 0);
+        mesh.position.set(node.pos.x, node.pos.y, 0.05);
       }
     }
     for (const strut of this.struts) {
