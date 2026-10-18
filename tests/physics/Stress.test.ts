@@ -16,8 +16,8 @@ describe('Stress & Breaking Mechanics', () => {
       isBroken: false
     };
 
-    // Stretched from 2.0m to 2.5m = 0.5m strain (25% strain). Wood maxStrain is 0.22 (22%).
-    expect(MATERIALS.wood.maxStrain).toBe(0.22);
+    // Stretched from 2.0m to 2.5m = 0.5m strain (25% strain). Wood maxStrain is 0.18 (18%).
+    expect(MATERIALS.wood.maxStrain).toBe(0.18);
     const stress = computeStress(strut, nodeA, nodeB);
     expect(stress).toBeGreaterThan(1.0);
 

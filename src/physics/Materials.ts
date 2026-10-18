@@ -16,7 +16,7 @@ export const MATERIALS: Record<MaterialType, MaterialProperties> = {
     costPerMeter: 100,
     maxLength: 2.0,
     stiffness: 1.0,
-    maxStrain: 0.20, // 20%
+    maxStrain: 0.01, // 1% - road deck cannot stretch like a cable without snapping
     massPerMeter: 15,
     isDriveable: true,
   },
@@ -24,8 +24,8 @@ export const MATERIALS: Record<MaterialType, MaterialProperties> = {
     type: 'wood',
     costPerMeter: 40,
     maxLength: 2.5,
-    stiffness: 1.0,
-    maxStrain: 0.22, // 22%
+    stiffness: 0.98,
+    maxStrain: 0.18, // 18% - structural wood truss compliance
     massPerMeter: 5,
     isDriveable: false,
   },
