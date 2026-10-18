@@ -43,16 +43,16 @@ export interface TerrainGround {
 export function createVehicle(config: VehicleConfig = {}): VehicleState {
   return {
     x: config.x ?? 0.5,
-    y: config.y ?? 2.3,
-    vx: config.vx ?? 0,
+    y: config.y ?? 2.25,
+    vx: config.vx ?? 0.3,
     vy: config.vy ?? 0,
     angle: config.angle ?? 0,
     angularVelocity: 0,
     mass: config.mass ?? 800,
     wheelBase: config.wheelBase ?? 1.2,
     wheelRadius: config.wheelRadius ?? 0.2,
-    motorTorque: config.motorTorque ?? 1500,
-    targetSpeed: config.targetSpeed ?? 2.2,
+    motorTorque: config.motorTorque ?? 800,
+    targetSpeed: config.targetSpeed ?? 1.0,
     goalX: config.goalX ?? 7.0,
     frontWheelOnGround: false,
     rearWheelOnGround: false,
@@ -176,7 +176,7 @@ export function updateVehicle(
   ground?: TerrainGround
 ): void {
   const gravity = -9.81;
-  const damping = 0.01;
+  const damping = 0.02;
 
   // 1. Integrate Gravity & Velocity
   vehicle.vy += gravity * dt;
@@ -226,14 +226,6 @@ export function updateVehicle(
       vehicle.vy -= vDotN * contact.normal.y;
     }
 
-    // Drive forward along surface tangent towards targetSpeed
-    const currentSpeed = vehicle.vx * contact.tangent.x + vehicle.vy * contact.tangent.y;
-    if (currentSpeed < vehicle.targetSpeed) {
-      const motorAcc = Math.min((vehicle.motorTorque / vehicle.mass), 2.5);
-      vehicle.vx += contact.tangent.x * motorAcc * dt;
-      vehicle.vy += contact.tangent.y * motorAcc * dt;
-    }
-
     // Transfer load onto dynamic road nodes
     if (!contact.isGround && contact.nodeA && contact.nodeB) {
       const loadForce = (vehicle.mass * 0.5 * -gravity) / (contact.nodeA.mass + contact.nodeB.mass);
@@ -247,9 +239,23 @@ export function updateVehicle(
     }
   }
 
-  // Prevent uncontrolled overspeed
-  if (vehicle.vx > vehicle.targetSpeed * 1.3) {
-    vehicle.vx = vehicle.targetSpeed * 1.3;
+  // Drive forward along surface tangent towards targetSpeed (applied once from driven wheel)
+  const driveContact = rearContact || frontContact;
+  if (driveContact) {
+    const currentSpeed = vehicle.vx * driveContact.tangent.x + vehicle.vy * driveContact.tangent.y;
+    if (currentSpeed < vehicle.targetSpeed) {
+      const motorAcc = Math.min((vehicle.motorTorque / vehicle.mass), 1.0);
+      vehicle.vx += driveContact.tangent.x * motorAcc * dt;
+      vehicle.vy += driveContact.tangent.y * motorAcc * dt;
+    }
+  }
+
+  // Speed governor: gentle braking if moving faster than targetSpeed
+  if (vehicle.vx > vehicle.targetSpeed) {
+    vehicle.vx = Math.max(vehicle.targetSpeed, vehicle.vx - 1.5 * dt);
+  }
+  if (vehicle.vx > vehicle.targetSpeed * 1.1) {
+    vehicle.vx = vehicle.targetSpeed * 1.1;
   }
 
   // Apply collision repulsion

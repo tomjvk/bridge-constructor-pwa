@@ -42,9 +42,11 @@ export class SceneView {
   private vehicleMesh!: VehicleMesh;
   private gridHelper!: THREE.GridHelper;
 
-  // Interaction
+  // Interaction & Timing
   private isPointerDown = false;
   private activeStartNode: Node | null = null;
+  private lastTime = 0;
+  private physicsAccumulator = 0;
   private onStatusChange?: (status: GameStatus) => void;
   private onStatsChange?: (stats: { spent: number; budget: number; strutCount: number; canUndo: boolean }) => void;
 
@@ -555,6 +557,8 @@ export class SceneView {
 
       const vCfg = this.buildManager.level.vehicle;
       const startY = (this.buildManager.level.terrain.deckY || 2.0) + 0.3;
+      this.physicsAccumulator = 0;
+      this.lastTime = performance.now();
       this.gameLoop.startSimulation({
         ...vCfg,
         x: vCfg.x ?? -1.5,
@@ -570,6 +574,7 @@ export class SceneView {
   }
 
   public resetSimulation(): void {
+    this.physicsAccumulator = 0;
     this.gameLoop.reset();
     this.vehicleMesh.setVisible(false);
     this.particleSystem.clear();
@@ -638,13 +643,34 @@ export class SceneView {
     }
   }
 
-  private animate(): void {
+  private animate(time = 0): void {
     requestAnimationFrame(this.animate);
-    if (this.gameLoop.status === 'simulating') {
-      this.stepPhysics(1 / 60);
-    } else {
-      this.particleSystem.update(1 / 60);
+
+    if (this.lastTime === 0) {
+      this.lastTime = time || performance.now();
     }
+    const current = time || performance.now();
+    const elapsedSeconds = Math.min(Math.max((current - this.lastTime) / 1000, 0), 0.1);
+    this.lastTime = current;
+
+    if (this.gameLoop.status === 'simulating') {
+      const fixedDt = 1 / 60;
+      this.physicsAccumulator += elapsedSeconds;
+
+      // Cap accumulator to avoid spiraling on background tab switch
+      if (this.physicsAccumulator > 0.2) {
+        this.physicsAccumulator = 0.2;
+      }
+
+      while (this.physicsAccumulator >= fixedDt) {
+        this.stepPhysics(fixedDt);
+        this.physicsAccumulator -= fixedDt;
+      }
+    } else {
+      this.physicsAccumulator = 0;
+      this.particleSystem.update(elapsedSeconds);
+    }
+
     this.renderer.render(this.scene, this.camera);
   }
 }

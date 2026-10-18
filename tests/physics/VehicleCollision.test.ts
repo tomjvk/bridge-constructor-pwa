@@ -21,7 +21,7 @@ describe('Vehicle Simulation', () => {
   it('supports vehicle on cliff approach ground without falling', () => {
     const terrain = { leftCliffX: 0, rightCliffX: 8.0, deckY: 2.0 };
     // Spawn vehicle on left approach at x = -1.5, deck level
-    const vehicle = createVehicle({ x: -1.5, y: 2.25, mass: 800, targetSpeed: 2.0 });
+    const vehicle = createVehicle({ x: -1.5, y: 2.25, mass: 800, targetSpeed: 1.0 });
 
     // Step physics for 60 frames (1 full second)
     for (let i = 0; i < 60; i++) {
@@ -35,7 +35,7 @@ describe('Vehicle Simulation', () => {
     // Smooth forward rollout along cliff towards bridge
     expect(vehicle.x).toBeGreaterThan(-1.5);
     // Cruising speed controlled near targetSpeed (not runaway speed)
-    expect(vehicle.vx).toBeLessThanOrEqual(2.6);
+    expect(vehicle.vx).toBeLessThanOrEqual(1.2);
   });
 });
 

@@ -19,8 +19,8 @@ export class GameLoop {
 
   public startSimulation(startXOrConfig: number | VehicleConfig = -1.0, startY = 2.3, goalX = 7.5): VehicleState {
     const config: VehicleConfig = typeof startXOrConfig === 'object'
-      ? { vx: 0.8, ...startXOrConfig }
-      : { x: startXOrConfig, y: startY, goalX, vx: 0.8 };
+      ? { vx: 0.3, ...startXOrConfig }
+      : { x: startXOrConfig, y: startY, goalX, vx: 0.3 };
     this.vehicle = createVehicle(config);
     this.status = 'simulating';
     this.events.onStatusChange?.(this.status);
