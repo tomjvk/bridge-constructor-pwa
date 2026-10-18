@@ -2,6 +2,9 @@ import { SceneView } from './render/SceneView';
 import { GameStatus } from './game/GameLoop';
 import { HUD, ToolType } from './ui/HUD';
 import { LEVELS } from './game/LevelData';
+import { registerPWA } from './pwa/registerServiceWorker';
+
+registerPWA();
 
 // Global error handler to catch and display any unexpected runtime errors
 window.addEventListener('error', (event) => {

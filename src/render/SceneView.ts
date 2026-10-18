@@ -7,6 +7,7 @@ import { VehicleMesh } from './VehicleMesh';
 import { GameLoop, GameStatus } from '../game/GameLoop';
 import { BuildManager } from '../game/BuildManager';
 import { LevelDef, LEVELS } from '../game/LevelData';
+import { SoundEffects } from '../audio/SoundEffects';
 
 export type ToolMode = MaterialType | 'eraser';
 
@@ -30,6 +31,8 @@ export class SceneView {
   public buildManager: BuildManager;
   public gameLoop: GameLoop;
   public activeTool: ToolMode = 'road';
+  public sfx = new SoundEffects();
+  private lastCreakTime = 0;
   private initialNodePositions: Map<string, Vector2> = new Map();
   private brokenStrutIds: Set<string> = new Set();
 
@@ -37,14 +40,18 @@ export class SceneView {
   private nodeMeshes: Map<string, THREE.Mesh> = new Map();
   private strutMeshes: Map<string, THREE.Mesh> = new Map();
   private terrainMeshes: THREE.Object3D[] = [];
+  private waterMesh: THREE.Mesh | null = null;
   private ghostStrutMesh!: THREE.Mesh;
   private particleSystem!: ParticleSystem;
   private vehicleMesh!: VehicleMesh;
   private gridHelper!: THREE.GridHelper;
 
-  // Interaction & Timing
+  // Interaction, Gestures & Timing
   private isPointerDown = false;
   private activeStartNode: Node | null = null;
+  private activePointers = new Map<number, { x: number; y: number }>();
+  private initialPinchDist = 0;
+  private initialPinchZoom = 1;
   private lastTime = 0;
   private physicsAccumulator = 0;
   private onStatusChange?: (status: GameStatus) => void;
@@ -59,7 +66,16 @@ export class SceneView {
     this.buildManager = new BuildManager(initialLevel);
 
     this.gameLoop = new GameLoop({
-      onStatusChange: (status) => this.onStatusChange?.(status),
+      onStatusChange: (status) => {
+        if (status === 'won') {
+          this.sfx.stopEngine();
+          this.sfx.playWin();
+        } else if (status === 'lost') {
+          this.sfx.stopEngine();
+          this.sfx.playSnap();
+        }
+        this.onStatusChange?.(status);
+      },
     });
 
     this.initScene();
@@ -152,10 +168,12 @@ export class SceneView {
     this.camera.right = viewWidth / 2;
     this.camera.top = viewHeight / 2;
     this.camera.bottom = -viewHeight / 2;
+    this.camera.zoom = 1.0;
     this.camera.updateProjectionMatrix();
 
     // Clear old visual meshes
     this.clearLevelMeshes();
+    this.waterMesh = null;
     this.initialNodePositions.clear();
     this.brokenStrutIds.clear();
 
@@ -253,6 +271,7 @@ export class SceneView {
     water.position.set(gap * 0.5, -2.0, -0.2);
     this.scene.add(water);
     this.terrainMeshes.push(water);
+    this.waterMesh = water;
   }
 
   private createNodeMesh(node: Node): THREE.Mesh {
@@ -423,7 +442,31 @@ export class SceneView {
   private setupEventListeners(): void {
     const canvas = this.renderer.domElement;
 
+    // Desktop Mouse Wheel Zoom
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
+      this.camera.zoom = Math.max(0.5, Math.min(2.5, this.camera.zoom * zoomFactor));
+      this.camera.updateProjectionMatrix();
+    }, { passive: false });
+
     canvas.addEventListener('pointerdown', (e) => {
+      this.sfx.unlock();
+      this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      // Multi-touch gestures (pinch-zoom and pan)
+      if (this.activePointers.size >= 2) {
+        this.isPointerDown = false;
+        this.activeStartNode = null;
+        this.ghostStrutMesh.visible = false;
+        const pts = Array.from(this.activePointers.values());
+        const dx = pts[1].x - pts[0].x;
+        const dy = pts[1].y - pts[0].y;
+        this.initialPinchDist = Math.hypot(dx, dy);
+        this.initialPinchZoom = this.camera.zoom;
+        return;
+      }
+
       if (this.gameLoop.status === 'simulating') return;
       const worldPos = this.getPlaneIntersection(e);
       if (!worldPos) return;
@@ -461,6 +504,32 @@ export class SceneView {
     });
 
     window.addEventListener('pointermove', (e) => {
+      if (this.activePointers.has(e.pointerId)) {
+        const prev = this.activePointers.get(e.pointerId)!;
+        this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        // Multi-touch pinch-zoom and pan handling
+        if (this.activePointers.size >= 2) {
+          const pts = Array.from(this.activePointers.values());
+          const dx = pts[1].x - pts[0].x;
+          const dy = pts[1].y - pts[0].y;
+          const dist = Math.hypot(dx, dy);
+          if (this.initialPinchDist > 0 && dist > 10) {
+            const factor = dist / this.initialPinchDist;
+            this.camera.zoom = Math.max(0.5, Math.min(2.5, this.initialPinchZoom * factor));
+          }
+
+          const midDeltaX = (e.clientX - prev.x) * 0.5;
+          const midDeltaY = (e.clientY - prev.y) * 0.5;
+          const viewHeight = this.camera.top - this.camera.bottom;
+          const worldUnitsPerPixel = viewHeight / ((this.container.clientHeight || window.innerHeight) * this.camera.zoom);
+          this.camera.position.x -= midDeltaX * worldUnitsPerPixel;
+          this.camera.position.y += midDeltaY * worldUnitsPerPixel;
+          this.camera.updateProjectionMatrix();
+          return;
+        }
+      }
+
       if (!this.isPointerDown || !this.activeStartNode || this.gameLoop.status === 'simulating') return;
       const rawPos = this.getPlaneIntersection(e);
       if (!rawPos) return;
@@ -494,7 +563,12 @@ export class SceneView {
       this.ghostStrutMesh.visible = true;
     });
 
-    window.addEventListener('pointerup', (e) => {
+    const onPointerEnd = (e: PointerEvent) => {
+      this.activePointers.delete(e.pointerId);
+      if (this.activePointers.size < 2) {
+        this.initialPinchDist = 0;
+      }
+
       if (!this.isPointerDown || !this.activeStartNode || this.gameLoop.status === 'simulating') {
         this.isPointerDown = false;
         this.activeStartNode = null;
@@ -522,7 +596,10 @@ export class SceneView {
       }
 
       this.activeStartNode = null;
-    });
+    };
+
+    window.addEventListener('pointerup', onPointerEnd);
+    window.addEventListener('pointercancel', onPointerEnd);
 
     window.addEventListener('resize', () => {
       const width = this.container.clientWidth || window.innerWidth;
@@ -566,6 +643,7 @@ export class SceneView {
         goalX: vCfg.goalX ?? (this.buildManager.level.gapDistance + 0.5),
       });
       this.vehicleMesh.setVisible(true);
+      this.sfx.startEngine();
       return true;
     } else {
       this.resetSimulation();
@@ -575,6 +653,7 @@ export class SceneView {
 
   public resetSimulation(): void {
     this.physicsAccumulator = 0;
+    this.sfx.stopEngine();
     this.gameLoop.reset();
     this.vehicleMesh.setVisible(false);
     this.particleSystem.clear();
@@ -609,11 +688,18 @@ export class SceneView {
 
     if (this.gameLoop.vehicle) {
       this.vehicleMesh.update(this.gameLoop.vehicle, dt);
+      this.sfx.updateEngine(this.gameLoop.vehicle.vx);
     }
 
+    let maxStress = 0;
     for (const strut of this.buildManager.struts) {
+      if (!strut.isBroken && strut.stress !== undefined && strut.stress > maxStress) {
+        maxStress = strut.stress;
+      }
+
       if (strut.isBroken && !this.brokenStrutIds.has(strut.id)) {
         this.brokenStrutIds.add(strut.id);
+        this.sfx.playSnap();
         const nodeA = this.buildManager.nodes.get(strut.nodeAId);
         const nodeB = this.buildManager.nodes.get(strut.nodeBId);
         if (nodeA && nodeB) {
@@ -625,6 +711,13 @@ export class SceneView {
           this.particleSystem.spawnSplinters(mid, 14, strut.material);
         }
       }
+    }
+
+    // Audible groaning when struts are under critical tension/compression
+    const nowSec = performance.now() / 1000;
+    if (maxStress > 0.75 && (nowSec - this.lastCreakTime > 0.35)) {
+      this.lastCreakTime = nowSec;
+      this.sfx.playCreak(maxStress);
     }
 
     this.particleSystem.update(dt);
@@ -652,6 +745,11 @@ export class SceneView {
     const current = time || performance.now();
     const elapsedSeconds = Math.min(Math.max((current - this.lastTime) / 1000, 0), 0.1);
     this.lastTime = current;
+
+    // Gentle river water wave animation
+    if (this.waterMesh) {
+      this.waterMesh.position.y = -2.0 + Math.sin(current * 0.002) * 0.05;
+    }
 
     if (this.gameLoop.status === 'simulating') {
       const fixedDt = 1 / 60;

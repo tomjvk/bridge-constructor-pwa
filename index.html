@@ -3,6 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#0284c7" />
+    <meta name="description" content="Physics-based 3D bridge engineering puzzle game" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="BridgeBuilder" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <title>Bridge Constructor</title>
     <style>
       * {
@@ -11,6 +20,7 @@
         padding: 0;
         user-select: none;
         -webkit-user-select: none;
+        touch-action: manipulation;
       }
       body, html {
         width: 100%;
@@ -18,6 +28,7 @@
         overflow: hidden;
         background: #181e2b;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        touch-action: none;
       }
       #canvas-container {
         width: 100%;
@@ -25,6 +36,7 @@
         position: absolute;
         top: 0;
         left: 0;
+        touch-action: none;
       }
       #ui-overlay {
         position: absolute;
