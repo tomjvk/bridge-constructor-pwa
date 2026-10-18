@@ -2,7 +2,17 @@ import { SceneView } from './render/SceneView';
 import { MaterialType } from './physics/Materials';
 import { GameStatus } from './game/GameLoop';
 
-document.addEventListener('DOMContentLoaded', () => {
+// Global error handler to catch and display any unexpected runtime errors
+window.addEventListener('error', (event) => {
+  console.error('BridgeConstructor Error:', event.error);
+  const errBox = document.getElementById('debug-error-box');
+  if (errBox) {
+    errBox.style.display = 'block';
+    errBox.textContent = `JS Error: ${event.message} at ${event.filename}:${event.lineno}`;
+  }
+});
+
+function initApp(): void {
   const container = document.getElementById('canvas-container');
   const btnToggle = document.getElementById('btn-toggle-sim') as HTMLButtonElement | null;
   const statusEl = document.getElementById('sim-status');
@@ -17,7 +27,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnWinReplay = document.getElementById('btn-win-replay');
   const btnLossRetry = document.getElementById('btn-loss-retry');
 
-  if (!container) return;
+  if (!container) {
+    console.error('Canvas container element not found!');
+    return;
+  }
 
   const updateStatusUI = (status: GameStatus) => {
     if (!statusEl) return;
@@ -75,20 +88,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  btnRoad?.addEventListener('click', () => selectMaterial('road'));
-  btnWood?.addEventListener('click', () => selectMaterial('wood'));
+  btnRoad?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    selectMaterial('road');
+  });
+
+  btnWood?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    selectMaterial('wood');
+  });
 
   if (btnToggle) {
-    btnToggle.addEventListener('click', () => {
+    btnToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
       sceneView.toggleSimulation();
     });
   }
 
-  btnWinReplay?.addEventListener('click', () => {
+  btnWinReplay?.addEventListener('click', (e) => {
+    e.stopPropagation();
     sceneView.resetSimulation();
   });
 
-  btnLossRetry?.addEventListener('click', () => {
+  btnLossRetry?.addEventListener('click', (e) => {
+    e.stopPropagation();
     sceneView.resetSimulation();
   });
-});
+}
+
+// Ensure execution whether DOM is already loaded or still loading
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
