@@ -5,7 +5,7 @@ export interface MaterialProperties {
   costPerMeter: number;     // Road: $100/m, Wood: $40/m
   maxLength: number;        // Road: 2.0m, Wood: 2.5m
   stiffness: number;        // PBD compliance/relaxation factor (0.95 - 1.0)
-  maxStrain: number;        // Relative stretch/compression before snapping (e.g. 0.15 = 15%)
+  maxStrain: number;        // Relative stretch/compression before snapping (e.g. 0.22 = 22%)
   massPerMeter: number;     // Road: 15 kg/m, Wood: 5 kg/m
   isDriveable: boolean;     // Only road struts support vehicle wheels
 }
@@ -16,7 +16,7 @@ export const MATERIALS: Record<MaterialType, MaterialProperties> = {
     costPerMeter: 100,
     maxLength: 2.0,
     stiffness: 1.0,
-    maxStrain: 0.10, // 10%
+    maxStrain: 0.20, // 20%
     massPerMeter: 15,
     isDriveable: true,
   },
@@ -24,8 +24,8 @@ export const MATERIALS: Record<MaterialType, MaterialProperties> = {
     type: 'wood',
     costPerMeter: 40,
     maxLength: 2.5,
-    stiffness: 0.95,
-    maxStrain: 0.15, // 15%
+    stiffness: 1.0,
+    maxStrain: 0.22, // 22%
     massPerMeter: 5,
     isDriveable: false,
   },

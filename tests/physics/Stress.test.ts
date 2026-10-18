@@ -6,7 +6,7 @@ import { MATERIALS } from '../../src/physics/Materials';
 describe('Stress & Breaking Mechanics', () => {
   it('computes stress ratio and breaks strut when strain exceeds maxStrain', () => {
     const nodeA: Node = { id: 'A', pos: new Vector2(0, 0), prevPos: new Vector2(0, 0), isAnchor: true, mass: 10 };
-    const nodeB: Node = { id: 'B', pos: new Vector2(2.5, 0), prevPos: new Vector2(2.5, 0), isAnchor: false, mass: 10 };
+    const nodeB: Node = { id: 'B', pos: new Vector2(2.5, 0), prevPos: new Vector2(2.5, 0), isAnchor: true, mass: 10 };
     const strut: Strut = {
       id: 'S1',
       nodeAId: 'A',
@@ -16,8 +16,8 @@ describe('Stress & Breaking Mechanics', () => {
       isBroken: false
     };
 
-    // Stretched from 2.0m to 2.5m = 0.5m strain (25% strain). Wood maxStrain is 0.15 (15%).
-    expect(MATERIALS.wood.maxStrain).toBe(0.15);
+    // Stretched from 2.0m to 2.5m = 0.5m strain (25% strain). Wood maxStrain is 0.22 (22%).
+    expect(MATERIALS.wood.maxStrain).toBe(0.22);
     const stress = computeStress(strut, nodeA, nodeB);
     expect(stress).toBeGreaterThan(1.0);
 

@@ -154,15 +154,15 @@ export class SceneView {
     this.resetSimulation();
     this.buildManager.loadLevel(level);
 
-    // Center camera on level gap
+    // Center camera on level gap with comfortable vertical breathing room
     const midX = level.gapDistance * 0.5;
     const midY = (level.terrain.deckY || 2.0) * 0.8;
-    this.camera.position.set(midX, midY, 20);
-    this.camera.lookAt(midX, midY, 0);
+    this.camera.position.set(midX, midY + 0.4, 20);
+    this.camera.lookAt(midX, midY + 0.4, 0);
 
-    // Adjust camera view height for larger levels
+    // Adjust camera view height for landscape mobile and desktop
     const aspect = (this.container.clientWidth || window.innerWidth) / (this.container.clientHeight || window.innerHeight);
-    const viewHeight = Math.max(8.0, level.gapDistance * 0.65);
+    const viewHeight = Math.max(9.5, level.gapDistance * 0.75);
     const viewWidth = viewHeight * aspect;
     this.camera.left = -viewWidth / 2;
     this.camera.right = viewWidth / 2;
@@ -605,7 +605,7 @@ export class SceneView {
       const width = this.container.clientWidth || window.innerWidth;
       const height = this.container.clientHeight || window.innerHeight;
       const aspect = width / height;
-      const viewHeight = Math.max(8.0, this.buildManager.level.gapDistance * 0.65);
+      const viewHeight = Math.max(9.5, this.buildManager.level.gapDistance * 0.75);
       const viewWidth = viewHeight * aspect;
 
       this.camera.left = -viewWidth / 2;

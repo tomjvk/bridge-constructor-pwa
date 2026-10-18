@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0284c7" />
     <meta name="description" content="Physics-based 3D bridge engineering puzzle game" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -48,51 +48,61 @@
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        padding: 16px;
+        padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
       }
       .hud-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        background: rgba(20, 24, 33, 0.88);
+        background: rgba(20, 24, 33, 0.92);
         backdrop-filter: blur(8px);
-        padding: 10px 18px;
-        border-radius: 12px;
+        padding: 6px 14px;
+        border-radius: 10px;
         color: #f1f5f9;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
         pointer-events: auto;
+        gap: 12px;
+      }
+      .hud-header-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
       }
       .hud-title {
-        font-weight: 700;
         font-size: 1.15rem;
-        letter-spacing: 0.5px;
-        color: #38bdf8;
+        flex-shrink: 0;
       }
       .level-select {
         background: #1e293b;
         color: #f8fafc;
         border: 1px solid #475569;
         border-radius: 6px;
-        padding: 4px 8px;
+        padding: 3px 8px;
         font-weight: 600;
         outline: none;
         cursor: pointer;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
+        white-space: nowrap;
       }
       .instructions {
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         color: #cbd5e1;
         background: rgba(15, 23, 42, 0.6);
-        padding: 6px 12px;
-        border-radius: 6px;
+        padding: 3px 8px;
+        border-radius: 4px;
         border-left: 3px solid #38bdf8;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .hud-stats {
         display: flex;
-        gap: 20px;
+        gap: 14px;
         align-items: center;
-        font-size: 0.92rem;
+        font-size: 0.82rem;
         color: #94a3b8;
+        flex-shrink: 0;
       }
       .hud-stats span {
         color: #f1f5f9;
@@ -101,14 +111,14 @@
       .budget-container {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        min-width: 150px;
+        gap: 3px;
+        min-width: 120px;
       }
       .budget-bar-bg {
         width: 100%;
-        height: 8px;
+        height: 6px;
         background: #334155;
-        border-radius: 4px;
+        border-radius: 3px;
         overflow: hidden;
       }
       #budget-progress-fill {
@@ -117,33 +127,46 @@
         background: #22c55e;
         transition: width 0.2s ease, background-color 0.2s ease;
       }
+      .stats-pills {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        white-space: nowrap;
+      }
       .hud-footer {
         display: flex;
         justify-content: space-between;
         align-items: flex-end;
         pointer-events: auto;
+        gap: 8px;
       }
       .tool-bar {
         display: flex;
-        gap: 10px;
-        background: rgba(20, 24, 33, 0.88);
+        gap: 6px;
+        background: rgba(20, 24, 33, 0.92);
         backdrop-filter: blur(8px);
-        padding: 8px 12px;
-        border-radius: 12px;
+        padding: 5px 8px;
+        border-radius: 10px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      }
+      .hud-sim-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
       .btn {
         background: #334155;
         color: #f8fafc;
         border: 2px solid transparent;
-        border-radius: 8px;
-        padding: 10px 18px;
-        font-size: 0.95rem;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-size: 0.85rem;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.15s ease;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
         pointer-events: auto;
+        white-space: nowrap;
       }
       .btn:hover:not(:disabled) {
         background: #475569;
@@ -159,7 +182,7 @@
       .btn-tool.active {
         border-color: #38bdf8;
         background: #1e293b;
-        box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+        box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
       }
       .btn-success {
         background: #16a34a;
@@ -182,19 +205,50 @@
       .legend {
         display: flex;
         align-items: center;
-        gap: 8px;
-        font-size: 0.8rem;
+        gap: 6px;
+        font-size: 0.75rem;
         color: #94a3b8;
         background: rgba(20, 24, 33, 0.75);
-        padding: 6px 12px;
-        border-radius: 8px;
-        margin-right: 12px;
+        padding: 5px 10px;
+        border-radius: 6px;
       }
       .legend-bar {
-        width: 60px;
-        height: 8px;
-        border-radius: 4px;
+        width: 45px;
+        height: 6px;
+        border-radius: 3px;
         background: linear-gradient(to right, #22c55e, #eab308, #ef4444);
+      }
+
+      /* Compact landscape media query for iPhone and mobile screens */
+      @media (max-height: 500px) {
+        #ui-overlay {
+          padding: max(4px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+        }
+        .hud-header {
+          padding: 3px 8px;
+        }
+        .instructions {
+          display: none;
+        }
+        .btn-subtext {
+          display: none;
+        }
+        .btn {
+          padding: 5px 9px;
+          font-size: 0.78rem;
+        }
+        .tool-bar {
+          padding: 3px 6px;
+          gap: 4px;
+        }
+        .budget-container {
+          min-width: 95px;
+          font-size: 0.75rem;
+        }
+        .hud-stats {
+          gap: 10px;
+          font-size: 0.75rem;
+        }
       }
 
       /* Modal Banners */
@@ -215,12 +269,12 @@
       .banner-modal {
         background: #1e293b;
         border-radius: 16px;
-        padding: 32px 40px;
+        padding: 24px 32px;
         text-align: center;
         color: white;
         box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
         border: 2px solid #334155;
-        max-width: 440px;
+        max-width: 400px;
         animation: popIn 0.25s ease-out;
       }
       @keyframes popIn {
@@ -228,14 +282,14 @@
         to { transform: scale(1); opacity: 1; }
       }
       .banner-modal h2 {
-        font-size: 1.8rem;
-        margin-bottom: 12px;
+        font-size: 1.5rem;
+        margin-bottom: 8px;
       }
       .banner-modal p {
         color: #94a3b8;
-        font-size: 1rem;
-        margin-bottom: 24px;
-        line-height: 1.5;
+        font-size: 0.95rem;
+        margin-bottom: 18px;
+        line-height: 1.4;
       }
       .banner-win h2 {
         color: #4ade80;
@@ -250,11 +304,9 @@
     <div id="canvas-container"></div>
     <div id="ui-overlay">
       <div class="hud-header">
-        <div style="display: flex; flex-direction: column; gap: 6px;">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <div class="hud-title">🌉 Bridge Constructor</div>
-            <select id="level-select" class="level-select"></select>
-          </div>
+        <div class="hud-header-left">
+          <div class="hud-title">🌉</div>
+          <select id="level-select" class="level-select"></select>
           <div id="level-desc" class="instructions">Bridge an 8m gap over the river with road and wood trusses.</div>
         </div>
         <div class="hud-stats">
@@ -262,20 +314,20 @@
             <div>Budget: <span id="budget-spent">$0</span> / <span id="budget-max">$3,000</span></div>
             <div class="budget-bar-bg"><div id="budget-progress-fill"></div></div>
           </div>
-          <div style="display: flex; flex-direction: column; justify-content: center; gap: 4px;">
+          <div class="stats-pills">
             <div>Struts: <span id="stat-struts">0</span></div>
-            <div>Status: <span id="sim-status" style="color: #22c55e;">Build Mode</span></div>
+            <div>Status: <span id="sim-status" style="color: #22c55e;">Build</span></div>
           </div>
         </div>
       </div>
       <div class="hud-footer">
         <div class="tool-bar">
-          <button id="btn-road" class="btn btn-tool active">🛣️ Road ($100/m)</button>
-          <button id="btn-wood" class="btn btn-tool">🪵 Wood ($40/m)</button>
+          <button id="btn-road" class="btn btn-tool active">🛣️ Road <span class="btn-subtext">($100/m)</span></button>
+          <button id="btn-wood" class="btn btn-tool">🪵 Wood <span class="btn-subtext">($40/m)</span></button>
           <button id="btn-eraser" class="btn btn-tool">🧹 Eraser</button>
           <button id="btn-undo" class="btn" disabled>↩ Undo</button>
         </div>
-        <div style="display: flex; align-items: center;">
+        <div class="hud-sim-controls">
           <div class="legend">
             <span>Stress:</span>
             <div class="legend-bar"></div>
@@ -292,8 +344,8 @@
         <h2>🎉 Level Complete!</h2>
         <p>Your bridge held strong and the vehicle safely crossed the chasm!</p>
         <div style="display: flex; gap: 10px;">
-          <button id="btn-win-replay" class="btn" style="flex: 1; padding: 12px;">🔄 Replay / Edit</button>
-          <button id="btn-win-next" class="btn btn-success" style="flex: 1; padding: 12px;">➡️ Next Level</button>
+          <button id="btn-win-replay" class="btn" style="flex: 1; padding: 10px;">🔄 Replay / Edit</button>
+          <button id="btn-win-next" class="btn btn-success" style="flex: 1; padding: 10px;">➡️ Next Level</button>
         </div>
       </div>
     </div>
@@ -303,7 +355,7 @@
       <div class="banner-modal">
         <h2>💥 Bridge Collapsed!</h2>
         <p>The bridge could not withstand the vehicle's weight and snapped under tension.</p>
-        <button id="btn-loss-retry" class="btn btn-warning" style="width: 100%; padding: 14px;">🔄 Strengthen & Retry</button>
+        <button id="btn-loss-retry" class="btn btn-warning" style="width: 100%; padding: 12px;">🔄 Strengthen & Retry</button>
       </div>
     </div>
 

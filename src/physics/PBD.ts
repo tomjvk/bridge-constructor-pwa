@@ -81,23 +81,7 @@ export function stepSimulation(
     node.pos.y += vy + gravity.y * dt * dt;
   }
 
-  // 2. Initial stress check: snap struts that are overextended before relaxation
-  for (const strut of struts) {
-    if (strut.isBroken) continue;
-    const nodeA = nodes.get(strut.nodeAId);
-    const nodeB = nodes.get(strut.nodeBId);
-    if (!nodeA || !nodeB) continue;
-
-    const stress = computeStress(strut, nodeA, nodeB);
-    strut.stress = stress;
-    strut.currentLength = nodeA.pos.distanceTo(nodeB.pos);
-
-    if (stress >= 1.0) {
-      strut.isBroken = true;
-    }
-  }
-
-  // 3. Constraint Relaxation
+  // 2. Constraint Relaxation (PBD iterative projection)
   for (let iter = 0; iter < iterations; iter++) {
     for (const strut of struts) {
       if (strut.isBroken) continue;
@@ -110,7 +94,7 @@ export function stepSimulation(
     }
   }
 
-  // 4. Post-relaxation stress calculation and breaking check
+  // 3. Post-relaxation stress calculation and structural snapping
   for (const strut of struts) {
     if (strut.isBroken) continue;
     const nodeA = nodes.get(strut.nodeAId);

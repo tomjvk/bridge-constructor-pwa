@@ -228,13 +228,19 @@ export function updateVehicle(
 
     // Transfer load onto dynamic road nodes
     if (!contact.isGround && contact.nodeA && contact.nodeB) {
-      const loadForce = (vehicle.mass * 0.5 * -gravity) / (contact.nodeA.mass + contact.nodeB.mass);
+      const wheelMass = vehicle.mass * 0.5;
       const t = contact.t ?? 0.5;
+      const totalMass = (contact.nodeA.mass + contact.nodeB.mass) * 12.0;
+      const loadDispA = ((wheelMass * (1 - t) * -gravity) / totalMass) * dt * dt;
+      const loadDispB = ((wheelMass * t * -gravity) / totalMass) * dt * dt;
+
       if (!contact.nodeA.isAnchor) {
-        contact.nodeA.pos.y -= loadForce * (1 - t) * dt * dt * 5;
+        contact.nodeA.pos.y -= loadDispA;
+        contact.nodeA.prevPos.y -= loadDispA;
       }
       if (!contact.nodeB.isAnchor) {
-        contact.nodeB.pos.y -= loadForce * t * dt * dt * 5;
+        contact.nodeB.pos.y -= loadDispB;
+        contact.nodeB.prevPos.y -= loadDispB;
       }
     }
   }
