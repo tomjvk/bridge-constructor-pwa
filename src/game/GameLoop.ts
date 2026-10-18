@@ -1,4 +1,4 @@
-import { VehicleConfig, VehicleState, createVehicle, updateVehicle } from '../physics/Vehicle';
+import { VehicleConfig, VehicleState, TerrainGround, createVehicle, updateVehicle } from '../physics/Vehicle';
 import { Node, Strut } from '../physics/PBD';
 
 export type GameStatus = 'building' | 'simulating' | 'won' | 'lost';
@@ -19,8 +19,8 @@ export class GameLoop {
 
   public startSimulation(startXOrConfig: number | VehicleConfig = -1.0, startY = 2.3, goalX = 7.5): VehicleState {
     const config: VehicleConfig = typeof startXOrConfig === 'object'
-      ? { vx: 1.2, ...startXOrConfig }
-      : { x: startXOrConfig, y: startY, goalX, vx: 1.2 };
+      ? { vx: 0.8, ...startXOrConfig }
+      : { x: startXOrConfig, y: startY, goalX, vx: 0.8 };
     this.vehicle = createVehicle(config);
     this.status = 'simulating';
     this.events.onStatusChange?.(this.status);
@@ -33,10 +33,10 @@ export class GameLoop {
     this.events.onStatusChange?.(this.status);
   }
 
-  public update(roadStruts: Strut[], nodes: Map<string, Node>, dt: number): void {
+  public update(roadStruts: Strut[], nodes: Map<string, Node>, dt: number, ground?: TerrainGround): void {
     if (this.status !== 'simulating' || !this.vehicle) return;
 
-    updateVehicle(this.vehicle, roadStruts, nodes, dt);
+    updateVehicle(this.vehicle, roadStruts, nodes, dt, ground);
     this.events.onVehicleUpdate?.(this.vehicle);
 
     if (this.vehicle.isCrossed) {

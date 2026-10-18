@@ -11,6 +11,7 @@ export interface VehicleConfig {
   wheelBase?: number;
   wheelRadius?: number;
   motorTorque?: number;
+  targetSpeed?: number;
   goalX?: number;
 }
 
@@ -25,11 +26,18 @@ export interface VehicleState {
   wheelBase: number;
   wheelRadius: number;
   motorTorque: number;
+  targetSpeed: number;
   goalX: number;
   frontWheelOnGround: boolean;
   rearWheelOnGround: boolean;
   isCrossed: boolean;
   isFallen: boolean;
+}
+
+export interface TerrainGround {
+  leftCliffX: number;
+  rightCliffX: number;
+  deckY: number;
 }
 
 export function createVehicle(config: VehicleConfig = {}): VehicleState {
@@ -44,6 +52,7 @@ export function createVehicle(config: VehicleConfig = {}): VehicleState {
     wheelBase: config.wheelBase ?? 1.2,
     wheelRadius: config.wheelRadius ?? 0.2,
     motorTorque: config.motorTorque ?? 1500,
+    targetSpeed: config.targetSpeed ?? 2.2,
     goalX: config.goalX ?? 7.0,
     frontWheelOnGround: false,
     rearWheelOnGround: false,
@@ -56,21 +65,44 @@ interface WheelContact {
   dist: number;
   normal: Vector2;
   tangent: Vector2;
-  nodeA: Node;
-  nodeB: Node;
-  t: number;
+  nodeA?: Node;
+  nodeB?: Node;
+  t?: number;
+  isGround?: boolean;
 }
 
 function checkWheelCollision(
   wheelPos: Vector2,
   wheelRadius: number,
   roadStruts: Strut[],
-  nodes: Map<string, Node>
+  nodes: Map<string, Node>,
+  ground?: TerrainGround
 ): WheelContact | null {
   let closestContact: WheelContact | null = null;
   const maxContactDistance = wheelRadius + 0.15; // Wheel radius + suspension travel
   let minDistance = maxContactDistance;
 
+  // 1. Check solid cliff approach/exit ground if provided
+  if (ground) {
+    const onLeftCliff = wheelPos.x <= ground.leftCliffX + 0.05;
+    const onRightCliff = wheelPos.x >= ground.rightCliffX - 0.05;
+
+    if (onLeftCliff || onRightCliff) {
+      const dist = wheelPos.y - ground.deckY;
+      // Wheel must be above deck and within contact range
+      if (dist >= -0.2 && dist < minDistance) {
+        minDistance = dist;
+        closestContact = {
+          dist,
+          normal: new Vector2(0, 1),
+          tangent: new Vector2(1, 0),
+          isGround: true,
+        };
+      }
+    }
+  }
+
+  // 2. Check road struts
   for (const strut of roadStruts) {
     if (strut.isBroken || strut.material !== 'road') continue;
     const nodeA = nodes.get(strut.nodeAId);
@@ -96,11 +128,15 @@ function checkWheelCollision(
     // Distance vector from projection to wheel
     const diffX = wheelPos.x - projX;
     const diffY = wheelPos.y - projY;
+
+    // Ignore wheels that have fallen significantly below the road deck
+    if (diffY < -0.15) continue;
+
     const dist = Math.sqrt(diffX * diffX + diffY * diffY);
 
     if (dist < minDistance) {
       minDistance = dist;
-      
+
       // Normal points upwards relative to road segment
       let nx = -abY / abLen;
       let ny = abX / abLen;
@@ -124,6 +160,7 @@ function checkWheelCollision(
         nodeA,
         nodeB,
         t,
+        isGround: false,
       };
     }
   }
@@ -135,7 +172,8 @@ export function updateVehicle(
   vehicle: VehicleState,
   roadStruts: Strut[],
   nodes: Map<string, Node>,
-  dt: number
+  dt: number,
+  ground?: TerrainGround
 ): void {
   const gravity = -9.81;
   const damping = 0.01;
@@ -162,9 +200,9 @@ export function updateVehicle(
     vehicle.y + halfBase * sinA
   );
 
-  // 2. Wheel Collisions
-  const rearContact = checkWheelCollision(rearWheel, vehicle.wheelRadius, roadStruts, nodes);
-  const frontContact = checkWheelCollision(frontWheel, vehicle.wheelRadius, roadStruts, nodes);
+  // 2. Wheel Collisions (checks ground terrain and road struts)
+  const rearContact = checkWheelCollision(rearWheel, vehicle.wheelRadius, roadStruts, nodes, ground);
+  const frontContact = checkWheelCollision(frontWheel, vehicle.wheelRadius, roadStruts, nodes, ground);
 
   vehicle.rearWheelOnGround = !!rearContact;
   vehicle.frontWheelOnGround = !!frontContact;
@@ -172,39 +210,46 @@ export function updateVehicle(
   let totalCorrectionY = 0;
   let totalCorrectionX = 0;
 
-  if (rearContact) {
-    const pen = vehicle.wheelRadius - rearContact.dist;
-    totalCorrectionX += rearContact.normal.x * pen * 0.5;
-    totalCorrectionY += rearContact.normal.y * pen * 0.5;
+  const contacts = [rearContact, frontContact].filter((c): c is WheelContact => !!c);
 
-    // Motor acceleration applied along road surface
-    const motorAcc = (vehicle.motorTorque / vehicle.mass) * 1.5;
-    vehicle.vx += rearContact.tangent.x * motorAcc * dt;
-    vehicle.vy += rearContact.tangent.y * motorAcc * dt;
-
-    // Transfer load onto road nodes
-    const loadForce = (vehicle.mass * 0.5 * -gravity) / (rearContact.nodeA.mass + rearContact.nodeB.mass);
-    if (!rearContact.nodeA.isAnchor) {
-      rearContact.nodeA.pos.y -= loadForce * (1 - rearContact.t) * dt * dt * 5;
+  for (const contact of contacts) {
+    const pen = vehicle.wheelRadius - contact.dist;
+    if (pen > 0) {
+      totalCorrectionX += contact.normal.x * pen * 0.5;
+      totalCorrectionY += contact.normal.y * pen * 0.5;
     }
-    if (!rearContact.nodeB.isAnchor) {
-      rearContact.nodeB.pos.y -= loadForce * rearContact.t * dt * dt * 5;
+
+    // Cancel velocity going into surface to prevent falling through or accumulating downward vy
+    const vDotN = vehicle.vx * contact.normal.x + vehicle.vy * contact.normal.y;
+    if (vDotN < 0) {
+      vehicle.vx -= vDotN * contact.normal.x;
+      vehicle.vy -= vDotN * contact.normal.y;
+    }
+
+    // Drive forward along surface tangent towards targetSpeed
+    const currentSpeed = vehicle.vx * contact.tangent.x + vehicle.vy * contact.tangent.y;
+    if (currentSpeed < vehicle.targetSpeed) {
+      const motorAcc = Math.min((vehicle.motorTorque / vehicle.mass), 2.5);
+      vehicle.vx += contact.tangent.x * motorAcc * dt;
+      vehicle.vy += contact.tangent.y * motorAcc * dt;
+    }
+
+    // Transfer load onto dynamic road nodes
+    if (!contact.isGround && contact.nodeA && contact.nodeB) {
+      const loadForce = (vehicle.mass * 0.5 * -gravity) / (contact.nodeA.mass + contact.nodeB.mass);
+      const t = contact.t ?? 0.5;
+      if (!contact.nodeA.isAnchor) {
+        contact.nodeA.pos.y -= loadForce * (1 - t) * dt * dt * 5;
+      }
+      if (!contact.nodeB.isAnchor) {
+        contact.nodeB.pos.y -= loadForce * t * dt * dt * 5;
+      }
     }
   }
 
-  if (frontContact) {
-    const pen = vehicle.wheelRadius - frontContact.dist;
-    totalCorrectionX += frontContact.normal.x * pen * 0.5;
-    totalCorrectionY += frontContact.normal.y * pen * 0.5;
-
-    // Transfer load onto road nodes
-    const loadForce = (vehicle.mass * 0.5 * -gravity) / (frontContact.nodeA.mass + frontContact.nodeB.mass);
-    if (!frontContact.nodeA.isAnchor) {
-      frontContact.nodeA.pos.y -= loadForce * (1 - frontContact.t) * dt * dt * 5;
-    }
-    if (!frontContact.nodeB.isAnchor) {
-      frontContact.nodeB.pos.y -= loadForce * frontContact.t * dt * dt * 5;
-    }
+  // Prevent uncontrolled overspeed
+  if (vehicle.vx > vehicle.targetSpeed * 1.3) {
+    vehicle.vx = vehicle.targetSpeed * 1.3;
   }
 
   // Apply collision repulsion

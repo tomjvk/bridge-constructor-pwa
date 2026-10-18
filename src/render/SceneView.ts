@@ -600,7 +600,7 @@ export class SceneView {
     stepSimulation(this.buildManager.nodes, this.buildManager.struts, 15, dt);
 
     const roadStruts = this.buildManager.struts.filter(s => s.material === 'road');
-    this.gameLoop.update(roadStruts, this.buildManager.nodes, dt);
+    this.gameLoop.update(roadStruts, this.buildManager.nodes, dt, this.buildManager.level.terrain);
 
     if (this.gameLoop.vehicle) {
       this.vehicleMesh.update(this.gameLoop.vehicle, dt);

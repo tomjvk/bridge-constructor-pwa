@@ -37,7 +37,7 @@ export const LEVELS: LevelDef[] = [
       { id: 'anchor_R1', pos: new Vector2(8.0, 2.0), prevPos: new Vector2(8.0, 2.0), isAnchor: true, mass: 1000 },
       { id: 'anchor_R2', pos: new Vector2(8.0, 0.5), prevPos: new Vector2(8.0, 0.5), isAnchor: true, mass: 1000 },
     ],
-    vehicle: { x: -1.5, y: 2.3, mass: 800, motorTorque: 1600, goalX: 8.5 },
+    vehicle: { x: -1.5, y: 2.25, mass: 800, motorTorque: 1200, targetSpeed: 2.0, goalX: 8.5 },
   },
   {
     id: 2,
@@ -54,7 +54,7 @@ export const LEVELS: LevelDef[] = [
       { id: 'anchor_R1', pos: new Vector2(14.0, 2.0), prevPos: new Vector2(14.0, 2.0), isAnchor: true, mass: 1000 },
       { id: 'anchor_R2', pos: new Vector2(14.0, 0.5), prevPos: new Vector2(14.0, 0.5), isAnchor: true, mass: 1000 },
     ],
-    vehicle: { x: -1.5, y: 2.3, mass: 1000, motorTorque: 1800, goalX: 14.5 },
+    vehicle: { x: -1.5, y: 2.25, mass: 1000, motorTorque: 1400, targetSpeed: 2.0, goalX: 14.5 },
   },
   {
     id: 3,
@@ -71,6 +71,6 @@ export const LEVELS: LevelDef[] = [
       { id: 'anchor_R2', pos: new Vector2(12.0, 1.5), prevPos: new Vector2(12.0, 1.5), isAnchor: true, mass: 1000 },
       { id: 'anchor_R3', pos: new Vector2(12.0, 0.0), prevPos: new Vector2(12.0, 0.0), isAnchor: true, mass: 1000 },
     ],
-    vehicle: { x: -1.5, y: 3.3, mass: 2200, wheelBase: 1.6, motorTorque: 2800, goalX: 12.5 },
+    vehicle: { x: -1.5, y: 3.25, mass: 2200, wheelBase: 1.6, motorTorque: 2200, targetSpeed: 1.8, goalX: 12.5 },
   },
 ];
