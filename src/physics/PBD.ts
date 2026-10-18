@@ -1,4 +1,5 @@
 import { Vector2 } from './Vector2';
+import { MaterialType, MATERIALS } from './Materials';
 
 export interface Node {
   id: string;
@@ -12,9 +13,11 @@ export interface Strut {
   id: string;
   nodeAId: string;
   nodeBId: string;
+  material: MaterialType;
   restLength: number;
+  currentLength?: number;
+  stress?: number;
   isBroken: boolean;
-  material?: string;
 }
 
 export function solveDistanceConstraint(
@@ -47,4 +50,79 @@ export function solveDistanceConstraint(
 
   nodeB.pos.x -= corrX * factorB;
   nodeB.pos.y -= corrY * factorB;
+}
+
+export function computeStress(strut: Strut, nodeA: Node, nodeB: Node): number {
+  const currentDist = nodeA.pos.distanceTo(nodeB.pos);
+  const strain = Math.abs(currentDist - strut.restLength) / (strut.restLength || 1e-4);
+  const mat = MATERIALS[strut.material] || MATERIALS.wood;
+  return strain / mat.maxStrain;
+}
+
+export function stepSimulation(
+  nodes: Map<string, Node>,
+  struts: Strut[],
+  iterations = 15,
+  dt = 1 / 60
+): void {
+  const gravity = new Vector2(0, -9.81);
+  const damping = 0.02;
+
+  // 1. Explicit Verlet Integration
+  for (const node of nodes.values()) {
+    if (node.isAnchor) continue;
+
+    const vx = (node.pos.x - node.prevPos.x) * (1 - damping);
+    const vy = (node.pos.y - node.prevPos.y) * (1 - damping);
+
+    node.prevPos.copy(node.pos);
+
+    node.pos.x += vx + gravity.x * dt * dt;
+    node.pos.y += vy + gravity.y * dt * dt;
+  }
+
+  // 2. Initial stress check: snap struts that are overextended before relaxation
+  for (const strut of struts) {
+    if (strut.isBroken) continue;
+    const nodeA = nodes.get(strut.nodeAId);
+    const nodeB = nodes.get(strut.nodeBId);
+    if (!nodeA || !nodeB) continue;
+
+    const stress = computeStress(strut, nodeA, nodeB);
+    strut.stress = stress;
+    strut.currentLength = nodeA.pos.distanceTo(nodeB.pos);
+
+    if (stress >= 1.0) {
+      strut.isBroken = true;
+    }
+  }
+
+  // 3. Constraint Relaxation
+  for (let iter = 0; iter < iterations; iter++) {
+    for (const strut of struts) {
+      if (strut.isBroken) continue;
+      const nodeA = nodes.get(strut.nodeAId);
+      const nodeB = nodes.get(strut.nodeBId);
+      if (!nodeA || !nodeB) continue;
+
+      const mat = MATERIALS[strut.material] || MATERIALS.wood;
+      solveDistanceConstraint(nodeA, nodeB, strut.restLength, mat.stiffness);
+    }
+  }
+
+  // 4. Post-relaxation stress calculation and breaking check
+  for (const strut of struts) {
+    if (strut.isBroken) continue;
+    const nodeA = nodes.get(strut.nodeAId);
+    const nodeB = nodes.get(strut.nodeBId);
+    if (!nodeA || !nodeB) continue;
+
+    const stress = computeStress(strut, nodeA, nodeB);
+    strut.stress = stress;
+    strut.currentLength = nodeA.pos.distanceTo(nodeB.pos);
+
+    if (stress >= 1.0) {
+      strut.isBroken = true;
+    }
+  }
 }
