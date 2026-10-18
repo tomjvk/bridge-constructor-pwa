@@ -56,6 +56,17 @@
         letter-spacing: 0.5px;
         color: #38bdf8;
       }
+      .level-select {
+        background: #1e293b;
+        color: #f8fafc;
+        border: 1px solid #475569;
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-weight: 600;
+        outline: none;
+        cursor: pointer;
+        font-size: 0.9rem;
+      }
       .instructions {
         font-size: 0.85rem;
         color: #cbd5e1;
@@ -66,16 +77,33 @@
       }
       .hud-stats {
         display: flex;
-        gap: 16px;
-        font-size: 0.95rem;
+        gap: 20px;
+        align-items: center;
+        font-size: 0.92rem;
         color: #94a3b8;
       }
       .hud-stats span {
         color: #f1f5f9;
         font-weight: 600;
       }
-      .hud-stats #stat-cost {
-        color: #22c55e;
+      .budget-container {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 150px;
+      }
+      .budget-bar-bg {
+        width: 100%;
+        height: 8px;
+        background: #334155;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      #budget-progress-fill {
+        width: 0%;
+        height: 100%;
+        background: #22c55e;
+        transition: width 0.2s ease, background-color 0.2s ease;
       }
       .hud-footer {
         display: flex;
@@ -105,12 +133,16 @@
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
         pointer-events: auto;
       }
-      .btn:hover {
+      .btn:hover:not(:disabled) {
         background: #475569;
         transform: translateY(-1px);
       }
-      .btn:active {
+      .btn:active:not(:disabled) {
         transform: translateY(1px);
+      }
+      .btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
       }
       .btn-tool.active {
         border-color: #38bdf8;
@@ -120,19 +152,19 @@
       .btn-success {
         background: #16a34a;
       }
-      .btn-success:hover {
+      .btn-success:hover:not(:disabled) {
         background: #15803d;
       }
       .btn-warning {
         background: #d97706;
       }
-      .btn-warning:hover {
+      .btn-warning:hover:not(:disabled) {
         background: #b45309;
       }
       .btn-danger {
         background: #dc2626;
       }
-      .btn-danger:hover {
+      .btn-danger:hover:not(:disabled) {
         background: #b91c1c;
       }
       .legend {
@@ -176,7 +208,7 @@
         color: white;
         box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
         border: 2px solid #334155;
-        max-width: 420px;
+        max-width: 440px;
         animation: popIn 0.25s ease-out;
       }
       @keyframes popIn {
@@ -206,18 +238,30 @@
     <div id="canvas-container"></div>
     <div id="ui-overlay">
       <div class="hud-header">
-        <div class="hud-title">🌉 Bridge Constructor (Slice 3: Vehicle Simulation)</div>
-        <div class="instructions">Drag short segments (snaps to 0.5m grid) across the 7m gap. Connect with Wood trusses!</div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="hud-title">🌉 Bridge Constructor</div>
+            <select id="level-select" class="level-select"></select>
+          </div>
+          <div id="level-desc" class="instructions">Bridge an 8m gap over the river with road and wood trusses.</div>
+        </div>
         <div class="hud-stats">
-          <div>Status: <span id="sim-status">Build Mode</span></div>
-          <div>Struts: <span id="stat-struts">0</span></div>
-          <div>Cost: <span id="stat-cost">$0</span></div>
+          <div class="budget-container">
+            <div>Budget: <span id="budget-spent">$0</span> / <span id="budget-max">$3,000</span></div>
+            <div class="budget-bar-bg"><div id="budget-progress-fill"></div></div>
+          </div>
+          <div style="display: flex; flex-direction: column; justify-content: center; gap: 4px;">
+            <div>Struts: <span id="stat-struts">0</span></div>
+            <div>Status: <span id="sim-status" style="color: #22c55e;">Build Mode</span></div>
+          </div>
         </div>
       </div>
       <div class="hud-footer">
         <div class="tool-bar">
           <button id="btn-road" class="btn btn-tool active">🛣️ Road ($100/m)</button>
           <button id="btn-wood" class="btn btn-tool">🪵 Wood ($40/m)</button>
+          <button id="btn-eraser" class="btn btn-tool">🧹 Eraser</button>
+          <button id="btn-undo" class="btn" disabled>↩ Undo</button>
         </div>
         <div style="display: flex; align-items: center;">
           <div class="legend">
@@ -235,7 +279,10 @@
       <div class="banner-modal">
         <h2>🎉 Level Complete!</h2>
         <p>Your bridge held strong and the vehicle safely crossed the chasm!</p>
-        <button id="btn-win-replay" class="btn btn-success" style="width: 100%; padding: 14px;">▶ Replay / Edit Bridge</button>
+        <div style="display: flex; gap: 10px;">
+          <button id="btn-win-replay" class="btn" style="flex: 1; padding: 12px;">🔄 Replay / Edit</button>
+          <button id="btn-win-next" class="btn btn-success" style="flex: 1; padding: 12px;">➡️ Next Level</button>
+        </div>
       </div>
     </div>
 

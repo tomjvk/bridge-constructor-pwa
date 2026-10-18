@@ -1,4 +1,4 @@
-import { VehicleState, createVehicle, updateVehicle } from '../physics/Vehicle';
+import { VehicleConfig, VehicleState, createVehicle, updateVehicle } from '../physics/Vehicle';
 import { Node, Strut } from '../physics/PBD';
 
 export type GameStatus = 'building' | 'simulating' | 'won' | 'lost';
@@ -17,13 +17,11 @@ export class GameLoop {
     this.events = events;
   }
 
-  public startSimulation(startX = -1.0, startY = 2.3, goalX = 7.5): VehicleState {
-    this.vehicle = createVehicle({
-      x: startX,
-      y: startY,
-      vx: 1.2, // Initial rollout speed
-      goalX,
-    });
+  public startSimulation(startXOrConfig: number | VehicleConfig = -1.0, startY = 2.3, goalX = 7.5): VehicleState {
+    const config: VehicleConfig = typeof startXOrConfig === 'object'
+      ? { vx: 1.2, ...startXOrConfig }
+      : { x: startXOrConfig, y: startY, goalX, vx: 1.2 };
+    this.vehicle = createVehicle(config);
     this.status = 'simulating';
     this.events.onStatusChange?.(this.status);
     return this.vehicle;

@@ -1,6 +1,7 @@
 import { SceneView } from './render/SceneView';
-import { MaterialType } from './physics/Materials';
 import { GameStatus } from './game/GameLoop';
+import { HUD, ToolType } from './ui/HUD';
+import { LEVELS } from './game/LevelData';
 
 // Global error handler to catch and display any unexpected runtime errors
 window.addEventListener('error', (event) => {
@@ -14,100 +15,98 @@ window.addEventListener('error', (event) => {
 
 function initApp(): void {
   const container = document.getElementById('canvas-container');
-  const btnToggle = document.getElementById('btn-toggle-sim') as HTMLButtonElement | null;
-  const statusEl = document.getElementById('sim-status');
-  const strutsEl = document.getElementById('stat-struts');
-  const costEl = document.getElementById('stat-cost');
-
-  const btnRoad = document.getElementById('btn-road') as HTMLButtonElement | null;
-  const btnWood = document.getElementById('btn-wood') as HTMLButtonElement | null;
-
-  const winOverlay = document.getElementById('win-overlay');
-  const lossOverlay = document.getElementById('loss-overlay');
-  const btnWinReplay = document.getElementById('btn-win-replay');
-  const btnLossRetry = document.getElementById('btn-loss-retry');
-
   if (!container) {
     console.error('Canvas container element not found!');
     return;
   }
 
-  const updateStatusUI = (status: GameStatus) => {
-    if (!statusEl) return;
-    switch (status) {
-      case 'building':
-        statusEl.textContent = 'Build Mode';
-        statusEl.style.color = '#22c55e';
-        if (btnToggle) {
-          btnToggle.textContent = '▶ Test Bridge';
-          btnToggle.className = 'btn btn-success';
-        }
-        if (winOverlay) winOverlay.style.display = 'none';
-        if (lossOverlay) lossOverlay.style.display = 'none';
-        break;
-      case 'simulating':
-        statusEl.textContent = 'Vehicle Driving...';
-        statusEl.style.color = '#eab308';
-        if (btnToggle) {
-          btnToggle.textContent = '⏹ Reset Simulation';
-          btnToggle.className = 'btn btn-warning';
-        }
-        if (winOverlay) winOverlay.style.display = 'none';
-        if (lossOverlay) lossOverlay.style.display = 'none';
-        break;
-      case 'won':
-        statusEl.textContent = 'Victory!';
-        statusEl.style.color = '#4ade80';
-        if (winOverlay) winOverlay.style.display = 'flex';
-        break;
-      case 'lost':
-        statusEl.textContent = 'Bridge Collapsed!';
-        statusEl.style.color = '#f87171';
-        if (lossOverlay) lossOverlay.style.display = 'flex';
-        break;
-    }
-  };
+  const winOverlay = document.getElementById('win-overlay');
+  const lossOverlay = document.getElementById('loss-overlay');
+  const btnWinReplay = document.getElementById('btn-win-replay');
+  const btnWinNext = document.getElementById('btn-win-next');
+  const btnLossRetry = document.getElementById('btn-loss-retry');
+  const statusEl = document.getElementById('sim-status');
 
-  const sceneView = new SceneView({
-    container,
-    onStatusChange: (status) => updateStatusUI(status),
-    onStatsChange: (stats) => {
-      if (strutsEl) strutsEl.textContent = stats.strutCount.toString();
-      if (costEl) costEl.textContent = `$${stats.cost.toLocaleString()}`;
+  let currentLevelIdx = 0;
+  let sceneView: SceneView;
+
+  const hud = new HUD({
+    onToolSelect: (tool: ToolType) => {
+      sceneView?.setTool(tool);
+    },
+    onUndo: () => {
+      sceneView?.undo();
+    },
+    onLevelSelect: (levelId: number) => {
+      const idx = LEVELS.findIndex((l) => l.id === levelId);
+      if (idx !== -1) {
+        currentLevelIdx = idx;
+        const level = LEVELS[idx];
+        sceneView?.loadLevel(level);
+        hud.updateLevelInfo(level);
+      }
+    },
+    onToggleSim: () => {
+      sceneView?.toggleSimulation();
+    },
+    onReset: () => {
+      sceneView?.resetSimulation();
     },
   });
 
-  const selectMaterial = (mat: MaterialType) => {
-    sceneView.setMaterial(mat);
-    if (mat === 'road') {
-      btnRoad?.classList.add('active');
-      btnWood?.classList.remove('active');
-    } else {
-      btnWood?.classList.add('active');
-      btnRoad?.classList.remove('active');
+  const updateStatusUI = (status: GameStatus) => {
+    if (statusEl) {
+      switch (status) {
+        case 'building':
+          statusEl.textContent = 'Build Mode';
+          statusEl.style.color = '#22c55e';
+          hud.setSimulating(false);
+          if (winOverlay) winOverlay.style.display = 'none';
+          if (lossOverlay) lossOverlay.style.display = 'none';
+          break;
+        case 'simulating':
+          statusEl.textContent = 'Vehicle Driving...';
+          statusEl.style.color = '#eab308';
+          hud.setSimulating(true);
+          if (winOverlay) winOverlay.style.display = 'none';
+          if (lossOverlay) lossOverlay.style.display = 'none';
+          break;
+        case 'won':
+          statusEl.textContent = 'Victory!';
+          statusEl.style.color = '#4ade80';
+          if (winOverlay) winOverlay.style.display = 'flex';
+          break;
+        case 'lost':
+          statusEl.textContent = 'Bridge Collapsed!';
+          statusEl.style.color = '#f87171';
+          if (lossOverlay) lossOverlay.style.display = 'flex';
+          break;
+      }
     }
   };
 
-  btnRoad?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    selectMaterial('road');
+  sceneView = new SceneView({
+    container,
+    level: LEVELS[0],
+    onStatusChange: (status) => updateStatusUI(status),
+    onStatsChange: (stats) => {
+      hud.updateStats(stats.spent, stats.budget, stats.strutCount, stats.canUndo);
+    },
   });
 
-  btnWood?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    selectMaterial('wood');
-  });
-
-  if (btnToggle) {
-    btnToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      sceneView.toggleSimulation();
-    });
-  }
+  hud.updateLevelInfo(LEVELS[0]);
 
   btnWinReplay?.addEventListener('click', (e) => {
     e.stopPropagation();
     sceneView.resetSimulation();
+  });
+
+  btnWinNext?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    currentLevelIdx = (currentLevelIdx + 1) % LEVELS.length;
+    const nextLevel = LEVELS[currentLevelIdx];
+    sceneView.loadLevel(nextLevel);
+    hud.updateLevelInfo(nextLevel);
   });
 
   btnLossRetry?.addEventListener('click', (e) => {

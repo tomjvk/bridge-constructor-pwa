@@ -5,11 +5,16 @@ import { Node, Strut, stepSimulation } from '../physics/PBD';
 import { createStrutMesh, updateStrutColor, ParticleSystem } from './StrutMesh';
 import { VehicleMesh } from './VehicleMesh';
 import { GameLoop, GameStatus } from '../game/GameLoop';
+import { BuildManager } from '../game/BuildManager';
+import { LevelDef, LEVELS } from '../game/LevelData';
+
+export type ToolMode = MaterialType | 'eraser';
 
 export interface SceneConfig {
   container: HTMLElement;
+  level?: LevelDef;
   onStatusChange?: (status: GameStatus) => void;
-  onStatsChange?: (stats: { nodeCount: number; strutCount: number; cost: number }) => void;
+  onStatsChange?: (stats: { spent: number; budget: number; strutCount: number; canUndo: boolean }) => void;
 }
 
 export class SceneView {
@@ -21,43 +26,45 @@ export class SceneView {
   private mouse = new THREE.Vector2();
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // Z = 0 plane
 
-  // Physics elements
-  public nodes: Map<string, Node> = new Map();
-  public struts: Strut[] = [];
+  // Game & Build system
+  public buildManager: BuildManager;
+  public gameLoop: GameLoop;
+  public activeTool: ToolMode = 'road';
   private initialNodePositions: Map<string, Vector2> = new Map();
   private brokenStrutIds: Set<string> = new Set();
 
   // Rendering elements
   private nodeMeshes: Map<string, THREE.Mesh> = new Map();
   private strutMeshes: Map<string, THREE.Mesh> = new Map();
+  private terrainMeshes: THREE.Object3D[] = [];
   private ghostStrutMesh!: THREE.Mesh;
   private particleSystem!: ParticleSystem;
   private vehicleMesh!: VehicleMesh;
   private gridHelper!: THREE.GridHelper;
 
-  // Interaction & Game state
-  public gameLoop: GameLoop;
+  // Interaction
   private isPointerDown = false;
   private activeStartNode: Node | null = null;
-  public activeMaterial: MaterialType = 'road';
   private onStatusChange?: (status: GameStatus) => void;
-  private onStatsChange?: (stats: { nodeCount: number; strutCount: number; cost: number }) => void;
+  private onStatsChange?: (stats: { spent: number; budget: number; strutCount: number; canUndo: boolean }) => void;
 
   constructor(config: SceneConfig) {
     this.container = config.container;
     this.onStatusChange = config.onStatusChange;
     this.onStatsChange = config.onStatsChange;
 
+    const initialLevel = config.level || LEVELS[0];
+    this.buildManager = new BuildManager(initialLevel);
+
     this.gameLoop = new GameLoop({
       onStatusChange: (status) => this.onStatusChange?.(status),
     });
 
     this.initScene();
-    this.initDefaultAnchors();
+    this.loadLevel(initialLevel);
     this.setupEventListeners();
     this.animate = this.animate.bind(this);
     requestAnimationFrame(this.animate);
-    this.emitStats();
   }
 
   private initScene(): void {
@@ -65,7 +72,7 @@ export class SceneView {
     const height = this.container.clientHeight || window.innerHeight || 600;
     const aspect = width / height;
 
-    const viewHeight = 7.5;
+    const viewHeight = 8.0;
     const viewWidth = viewHeight * aspect;
 
     this.camera = new THREE.OrthographicCamera(
@@ -76,11 +83,11 @@ export class SceneView {
       0.1,
       1000
     );
-    this.camera.position.set(3.5, 1.5, 20);
-    this.camera.lookAt(3.5, 1.5, 0);
+    this.camera.position.set(4.0, 1.5, 20);
+    this.camera.lookAt(4.0, 1.5, 0);
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x111827); // Deep modern dark slate
+    this.scene.background = new THREE.Color(0x111827);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     this.renderer.setSize(width, height);
@@ -95,11 +102,8 @@ export class SceneView {
     dirLight.position.set(5, 10, 15);
     this.scene.add(dirLight);
 
-    // 1.0m Construction Grid (just behind construction plane)
+    // 1.0m Construction Grid
     this.buildGrid();
-
-    // Environment: Cliffs in background behind bridge
-    this.buildCliffsAndWater();
 
     // Vehicle 3D Mesh
     this.vehicleMesh = new VehicleMesh();
@@ -122,50 +126,119 @@ export class SceneView {
   }
 
   private buildGrid(): void {
-    // 24m x 12m grid with 1.0m spacing at Z = -0.02
-    this.gridHelper = new THREE.GridHelper(24, 24, 0x0284c7, 0x1e293b);
+    this.gridHelper = new THREE.GridHelper(30, 30, 0x0284c7, 0x1e293b);
     this.gridHelper.rotation.x = Math.PI / 2;
-    this.gridHelper.position.set(3.5, 1.5, -0.02);
+    this.gridHelper.position.set(6.0, 1.5, -0.02);
     this.scene.add(this.gridHelper);
   }
 
-  private buildCliffsAndWater(): void {
-    const cliffMat = new THREE.MeshStandardMaterial({
-      color: 0x334155,
-      roughness: 0.9,
-    });
-    const grassMat = new THREE.MeshStandardMaterial({
-      color: 0x15803d,
-      roughness: 0.7,
-    });
+  public loadLevel(level: LevelDef): void {
+    this.resetSimulation();
+    this.buildManager.loadLevel(level);
 
-    // Left Cliff: positioned behind bridge at Z = -0.6 with depth 1.0
-    // Front face sits at Z = -0.1, so joints at Z = 0 pop out clearly!
-    const leftCliffGeom = new THREE.BoxGeometry(7, 5, 1.0);
+    // Center camera on level gap
+    const midX = level.gapDistance * 0.5;
+    const midY = (level.terrain.deckY || 2.0) * 0.8;
+    this.camera.position.set(midX, midY, 20);
+    this.camera.lookAt(midX, midY, 0);
+
+    // Adjust camera view height for larger levels
+    const aspect = (this.container.clientWidth || window.innerWidth) / (this.container.clientHeight || window.innerHeight);
+    const viewHeight = Math.max(8.0, level.gapDistance * 0.65);
+    const viewWidth = viewHeight * aspect;
+    this.camera.left = -viewWidth / 2;
+    this.camera.right = viewWidth / 2;
+    this.camera.top = viewHeight / 2;
+    this.camera.bottom = -viewHeight / 2;
+    this.camera.updateProjectionMatrix();
+
+    // Clear old visual meshes
+    this.clearLevelMeshes();
+    this.initialNodePositions.clear();
+    this.brokenStrutIds.clear();
+
+    // Rebuild terrain for level
+    this.buildTerrain(level);
+
+    // Build anchor meshes
+    for (const node of this.buildManager.nodes.values()) {
+      this.createNodeMesh(node);
+      this.initialNodePositions.set(node.id, node.pos.clone());
+    }
+
+    this.emitStats();
+  }
+
+  private clearLevelMeshes(): void {
+    for (const m of this.terrainMeshes) {
+      this.scene.remove(m);
+    }
+    this.terrainMeshes = [];
+
+    for (const m of this.nodeMeshes.values()) {
+      this.scene.remove(m);
+    }
+    this.nodeMeshes.clear();
+
+    for (const m of this.strutMeshes.values()) {
+      this.scene.remove(m);
+    }
+    this.strutMeshes.clear();
+  }
+
+  private buildTerrain(level: LevelDef): void {
+    const cliffMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.9 });
+    const grassMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.7 });
+
+    const deckY = level.terrain.deckY;
+    const gap = level.gapDistance;
+
+    // Left Cliff (X <= 0)
+    const leftCliffGeom = new THREE.BoxGeometry(8, 8, 1.0);
     const leftCliff = new THREE.Mesh(leftCliffGeom, cliffMat);
-    leftCliff.position.set(-3.5, -0.5, -0.6);
+    leftCliff.position.set(-4, deckY - 4, -0.6);
     this.scene.add(leftCliff);
+    this.terrainMeshes.push(leftCliff);
 
-    // Left Grass Top (flush with bridge deck at Y = 2.0)
-    const leftGrassGeom = new THREE.BoxGeometry(7, 0.2, 1.1);
+    const leftGrassGeom = new THREE.BoxGeometry(8, 0.25, 1.1);
     const leftGrass = new THREE.Mesh(leftGrassGeom, grassMat);
-    leftGrass.position.set(-3.5, 1.9, -0.6);
+    leftGrass.position.set(-4, deckY - 0.1, -0.6);
     this.scene.add(leftGrass);
+    this.terrainMeshes.push(leftGrass);
 
-    // Right Cliff: positioned behind bridge at Z = -0.6 with depth 1.0
-    const rightCliffGeom = new THREE.BoxGeometry(7, 5, 1.0);
+    // Right Cliff (X >= gap)
+    const rightCliffGeom = new THREE.BoxGeometry(8, 8, 1.0);
     const rightCliff = new THREE.Mesh(rightCliffGeom, cliffMat);
-    rightCliff.position.set(10.5, -0.5, -0.6);
+    rightCliff.position.set(gap + 4, deckY - 4, -0.6);
     this.scene.add(rightCliff);
+    this.terrainMeshes.push(rightCliff);
 
-    // Right Grass Top
-    const rightGrassGeom = new THREE.BoxGeometry(7, 0.2, 1.1);
+    const rightGrassGeom = new THREE.BoxGeometry(8, 0.25, 1.1);
     const rightGrass = new THREE.Mesh(rightGrassGeom, grassMat);
-    rightGrass.position.set(10.5, 1.9, -0.6);
+    rightGrass.position.set(gap + 4, deckY - 0.1, -0.6);
     this.scene.add(rightGrass);
+    this.terrainMeshes.push(rightGrass);
 
-    // River / Water plane at bottom
-    const waterGeom = new THREE.PlaneGeometry(32, 8);
+    // Central Island (Level 2)
+    if (level.terrain.hasIsland && level.terrain.islandX !== undefined) {
+      const islandX = level.terrain.islandX;
+      const islandW = level.terrain.islandWidth || 2.0;
+
+      const islandGeom = new THREE.BoxGeometry(islandW, 5, 1.0);
+      const island = new THREE.Mesh(islandGeom, cliffMat);
+      island.position.set(islandX, -1.0, -0.6);
+      this.scene.add(island);
+      this.terrainMeshes.push(island);
+
+      const islandGrassGeom = new THREE.BoxGeometry(islandW, 0.2, 1.1);
+      const islandGrass = new THREE.Mesh(islandGrassGeom, grassMat);
+      islandGrass.position.set(islandX, 1.3, -0.6);
+      this.scene.add(islandGrass);
+      this.terrainMeshes.push(islandGrass);
+    }
+
+    // River / Water plane
+    const waterGeom = new THREE.PlaneGeometry(gap + 20, 8);
     const waterMat = new THREE.MeshStandardMaterial({
       color: 0x0284c7,
       roughness: 0.1,
@@ -175,33 +248,9 @@ export class SceneView {
     });
     const water = new THREE.Mesh(waterGeom, waterMat);
     water.rotation.x = -Math.PI / 2;
-    water.position.set(3.5, -1.8, -0.2);
+    water.position.set(gap * 0.5, -2.0, -0.2);
     this.scene.add(water);
-  }
-
-  private initDefaultAnchors(): void {
-    const anchors: Node[] = [
-      // Left cliff approach road anchor (within 1.8m <= 2.0m max length)
-      { id: 'anchor_approach_L', pos: new Vector2(-1.8, 2.0), prevPos: new Vector2(-1.8, 2.0), isAnchor: true, mass: 1000 },
-      // Left cliff edge anchors (glowing yellow)
-      { id: 'anchor_L1', pos: new Vector2(0, 2.0), prevPos: new Vector2(0, 2.0), isAnchor: true, mass: 1000 },
-      { id: 'anchor_L2', pos: new Vector2(0, 0.5), prevPos: new Vector2(0, 0.5), isAnchor: true, mass: 1000 },
-      // Right cliff edge anchors (glowing yellow)
-      { id: 'anchor_R1', pos: new Vector2(7, 2.0), prevPos: new Vector2(7, 2.0), isAnchor: true, mass: 1000 },
-      { id: 'anchor_R2', pos: new Vector2(7, 0.5), prevPos: new Vector2(7, 0.5), isAnchor: true, mass: 1000 },
-      // Right cliff landing road anchor (within 1.8m <= 2.0m max length)
-      { id: 'anchor_landing_R', pos: new Vector2(8.8, 2.0), prevPos: new Vector2(8.8, 2.0), isAnchor: true, mass: 1000 },
-    ];
-
-    for (const a of anchors) {
-      this.nodes.set(a.id, a);
-      this.initialNodePositions.set(a.id, a.pos.clone());
-      this.createNodeMesh(a);
-    }
-
-    // Connect approach road on left cliff and landing on right cliff
-    this.addStrut(this.nodes.get('anchor_approach_L')!, this.nodes.get('anchor_L1')!, 'road');
-    this.addStrut(this.nodes.get('anchor_R1')!, this.nodes.get('anchor_landing_R')!, 'road');
+    this.terrainMeshes.push(water);
   }
 
   private createNodeMesh(node: Node): THREE.Mesh {
@@ -230,8 +279,8 @@ export class SceneView {
   }
 
   private updateSingleStrutMesh(strut: Strut): void {
-    const nodeA = this.nodes.get(strut.nodeAId);
-    const nodeB = this.nodes.get(strut.nodeBId);
+    const nodeA = this.buildManager.nodes.get(strut.nodeAId);
+    const nodeB = this.buildManager.nodes.get(strut.nodeBId);
     const mesh = this.strutMeshes.get(strut.id);
     if (!nodeA || !nodeB || !mesh) return;
 
@@ -258,68 +307,13 @@ export class SceneView {
     }
   }
 
-  public addStrut(nodeA: Node, nodeB: Node, material: MaterialType = this.activeMaterial): Strut | null {
-    const exists = this.struts.some(
-      s => (s.nodeAId === nodeA.id && s.nodeBId === nodeB.id) ||
-           (s.nodeAId === nodeB.id && s.nodeBId === nodeA.id)
-    );
-    if (exists) return null;
-
-    const length = nodeA.pos.distanceTo(nodeB.pos);
-    const matProps = MATERIALS[material];
-
-    if (length > matProps.maxLength) {
-      return null;
-    }
-
-    const strut: Strut = {
-      id: `strut_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      nodeAId: nodeA.id,
-      nodeBId: nodeB.id,
-      material,
-      restLength: length,
-      currentLength: length,
-      stress: 0,
-      isBroken: false,
-    };
-
-    this.struts.push(strut);
-    this.addStrutMesh(strut);
-    this.emitStats();
-    return strut;
-  }
-
-  public calculateTotalCost(): number {
-    let cost = 0;
-    for (const s of this.struts) {
-      if (s.nodeAId.includes('approach') || s.nodeBId.includes('landing')) continue;
-      const mat = MATERIALS[s.material];
-      cost += s.restLength * mat.costPerMeter;
-    }
-    return Math.round(cost);
-  }
-
-  private emitStats(): void {
-    const userStruts = this.struts.filter(s => !s.nodeAId.includes('approach') && !s.nodeBId.includes('landing'));
+  public emitStats(): void {
     this.onStatsChange?.({
-      nodeCount: this.nodes.size,
-      strutCount: userStruts.filter(s => !s.isBroken).length,
-      cost: this.calculateTotalCost(),
+      spent: this.buildManager.getSpentBudget(),
+      budget: this.buildManager.level.budget,
+      strutCount: this.buildManager.struts.length,
+      canUndo: this.buildManager.undoStack.length > 0,
     });
-  }
-
-  private findNearestNode(worldPos: Vector2, maxRadius = 0.4): Node | null {
-    let nearest: Node | null = null;
-    let minDist = maxRadius;
-
-    for (const node of this.nodes.values()) {
-      const dist = node.pos.distanceTo(worldPos);
-      if (dist < minDist) {
-        minDist = dist;
-        nearest = node;
-      }
-    }
-    return nearest;
   }
 
   private snapToGrid(pos: Vector2): Vector2 {
@@ -343,6 +337,87 @@ export class SceneView {
     return null;
   }
 
+  private findClickedStrut(worldPos: Vector2): Strut | null {
+    let closestStrut: Strut | null = null;
+    let minDist = 0.35;
+
+    for (const strut of this.buildManager.struts) {
+      const nodeA = this.buildManager.nodes.get(strut.nodeAId);
+      const nodeB = this.buildManager.nodes.get(strut.nodeBId);
+      if (!nodeA || !nodeB) continue;
+
+      const abX = nodeB.pos.x - nodeA.pos.x;
+      const abY = nodeB.pos.y - nodeA.pos.y;
+      const abLenSq = abX * abX + abY * abY;
+      if (abLenSq === 0) continue;
+
+      const apX = worldPos.x - nodeA.pos.x;
+      const apY = worldPos.y - nodeA.pos.y;
+      const t = Math.max(0, Math.min(1, (apX * abX + apY * abY) / abLenSq));
+
+      const projX = nodeA.pos.x + t * abX;
+      const projY = nodeA.pos.y + t * abY;
+
+      const dX = worldPos.x - projX;
+      const dY = worldPos.y - projY;
+      const dist = Math.sqrt(dX * dX + dY * dY);
+
+      if (dist < minDist) {
+        minDist = dist;
+        closestStrut = strut;
+      }
+    }
+    return closestStrut;
+  }
+
+  public setTool(tool: ToolMode): void {
+    this.activeTool = tool;
+    this.container.style.cursor = tool === 'eraser' ? 'crosshair' : 'default';
+  }
+
+  public undo(): void {
+    if (this.gameLoop.status === 'simulating') return;
+    const success = this.buildManager.undo();
+    if (success) {
+      this.syncSceneFromBuildManager();
+      this.emitStats();
+    }
+  }
+
+  private syncSceneFromBuildManager(): void {
+    // 1. Remove node meshes that no longer exist
+    for (const [id, mesh] of this.nodeMeshes) {
+      if (!this.buildManager.nodes.has(id)) {
+        this.scene.remove(mesh);
+        mesh.geometry.dispose();
+        this.nodeMeshes.delete(id);
+      }
+    }
+    // 2. Add missing node meshes
+    for (const node of this.buildManager.nodes.values()) {
+      if (!this.nodeMeshes.has(node.id)) {
+        this.createNodeMesh(node);
+      }
+    }
+    // 3. Remove strut meshes that no longer exist
+    const currentStrutIds = new Set(this.buildManager.struts.map(s => s.id));
+    for (const [id, mesh] of this.strutMeshes) {
+      if (!currentStrutIds.has(id)) {
+        this.scene.remove(mesh);
+        mesh.geometry.dispose();
+        this.strutMeshes.delete(id);
+      }
+    }
+    // 4. Add missing strut meshes
+    for (const strut of this.buildManager.struts) {
+      if (!this.strutMeshes.has(strut.id)) {
+        this.addStrutMesh(strut);
+      } else {
+        this.updateSingleStrutMesh(strut);
+      }
+    }
+  }
+
   private setupEventListeners(): void {
     const canvas = this.renderer.domElement;
 
@@ -351,7 +426,32 @@ export class SceneView {
       const worldPos = this.getPlaneIntersection(e);
       if (!worldPos) return;
 
-      const nearest = this.findNearestNode(worldPos, 0.5);
+      // Handle Eraser / Delete Tool
+      if (this.activeTool === 'eraser') {
+        const clickedStrut = this.findClickedStrut(worldPos);
+        if (clickedStrut) {
+          this.buildManager.deleteStrut(clickedStrut.id);
+          this.syncSceneFromBuildManager();
+          this.emitStats();
+          return;
+        }
+        const clickedNode = this.buildManager.findNodeNear(worldPos, 0.4);
+        if (clickedNode && !clickedNode.isAnchor) {
+          const strutsToDelete = this.buildManager.struts.filter(
+            s => s.nodeAId === clickedNode.id || s.nodeBId === clickedNode.id
+          );
+          for (const s of strutsToDelete) {
+            this.buildManager.deleteStrut(s.id);
+          }
+          this.syncSceneFromBuildManager();
+          this.emitStats();
+          return;
+        }
+        return;
+      }
+
+      // Handle Strut Drawing Tool (Road or Wood)
+      const nearest = this.buildManager.findNodeNear(worldPos, 0.5);
       if (nearest) {
         this.isPointerDown = true;
         this.activeStartNode = nearest;
@@ -363,10 +463,12 @@ export class SceneView {
       const rawPos = this.getPlaneIntersection(e);
       if (!rawPos) return;
 
-      const nearestNode = this.findNearestNode(rawPos, 0.4);
+      const nearestNode = this.buildManager.findNodeNear(rawPos, 0.4);
       const targetPos = nearestNode ? nearestNode.pos : this.snapToGrid(rawPos);
 
-      const matProps = MATERIALS[this.activeMaterial];
+      const mat = this.activeTool === 'eraser' ? 'road' : this.activeTool;
+      const matProps = MATERIALS[mat];
+
       const pA = new THREE.Vector3(this.activeStartNode.pos.x, this.activeStartNode.pos.y, 0.05);
       const pB = new THREE.Vector3(targetPos.x, targetPos.y, 0.05);
       const mid = new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5);
@@ -378,10 +480,13 @@ export class SceneView {
       this.ghostStrutMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
 
       const ghostMat = this.ghostStrutMesh.material as THREE.MeshBasicMaterial;
-      if (len > matProps.maxLength) {
-        ghostMat.color.setHex(0xef4444);
+      const cost = len * matProps.costPerMeter;
+      const exceedsBudget = (this.buildManager.getSpentBudget() + cost) > this.buildManager.level.budget;
+
+      if (len > matProps.maxLength || exceedsBudget) {
+        ghostMat.color.setHex(0xef4444); // Red if too long or budget exceeded
       } else {
-        ghostMat.color.setHex(this.activeMaterial === 'road' ? 0x38bdf8 : 0xf59e0b);
+        ghostMat.color.setHex(mat === 'road' ? 0x38bdf8 : 0xf59e0b);
       }
 
       this.ghostStrutMesh.visible = true;
@@ -404,29 +509,14 @@ export class SceneView {
         return;
       }
 
-      let endNode = this.findNearestNode(rawPos, 0.4);
-      const matProps = MATERIALS[this.activeMaterial];
+      const mat = this.activeTool === 'eraser' ? 'road' : this.activeTool;
+      const nearestNode = this.buildManager.findNodeNear(rawPos, 0.4);
+      const targetPos = nearestNode ? nearestNode.pos : this.snapToGrid(rawPos);
 
-      if (!endNode) {
-        const snappedPos = this.snapToGrid(rawPos);
-        const dist = this.activeStartNode.pos.distanceTo(snappedPos);
-        if (dist > 0.3 && dist <= matProps.maxLength) {
-          const newNodeId = `node_${Date.now()}`;
-          endNode = {
-            id: newNodeId,
-            pos: snappedPos.clone(),
-            prevPos: snappedPos.clone(),
-            isAnchor: false,
-            mass: 15,
-          };
-          this.nodes.set(endNode.id, endNode);
-          this.initialNodePositions.set(endNode.id, endNode.pos.clone());
-          this.createNodeMesh(endNode);
-        }
-      }
-
-      if (endNode && endNode.id !== this.activeStartNode.id) {
-        this.addStrut(this.activeStartNode, endNode, this.activeMaterial);
+      const added = this.buildManager.createStrut(this.activeStartNode.id, targetPos, mat);
+      if (added) {
+        this.syncSceneFromBuildManager();
+        this.emitStats();
       }
 
       this.activeStartNode = null;
@@ -436,7 +526,7 @@ export class SceneView {
       const width = this.container.clientWidth || window.innerWidth;
       const height = this.container.clientHeight || window.innerHeight;
       const aspect = width / height;
-      const viewHeight = 7.5;
+      const viewHeight = Math.max(8.0, this.buildManager.level.gapDistance * 0.65);
       const viewWidth = viewHeight * aspect;
 
       this.camera.left = -viewWidth / 2;
@@ -449,22 +539,28 @@ export class SceneView {
     });
   }
 
-  public setMaterial(material: MaterialType): void {
-    this.activeMaterial = material;
-  }
-
   public toggleSimulation(): boolean {
     if (this.gameLoop.status === 'building') {
       this.brokenStrutIds.clear();
-      for (const [id, node] of this.nodes) {
+      this.initialNodePositions.clear();
+
+      for (const [id, node] of this.buildManager.nodes) {
         this.initialNodePositions.set(id, node.pos.clone());
         node.prevPos.copy(node.pos);
       }
-      for (const s of this.struts) {
+      for (const s of this.buildManager.struts) {
         s.isBroken = false;
         s.stress = 0;
       }
-      this.gameLoop.startSimulation(-1.5, 2.3, 7.5);
+
+      const vCfg = this.buildManager.level.vehicle;
+      const startY = (this.buildManager.level.terrain.deckY || 2.0) + 0.3;
+      this.gameLoop.startSimulation({
+        ...vCfg,
+        x: vCfg.x ?? -1.5,
+        y: vCfg.y ?? startY,
+        goalX: vCfg.goalX ?? (this.buildManager.level.gapDistance + 0.5),
+      });
       this.vehicleMesh.setVisible(true);
       return true;
     } else {
@@ -479,14 +575,14 @@ export class SceneView {
     this.particleSystem.clear();
 
     for (const [id, initialPos] of this.initialNodePositions) {
-      const node = this.nodes.get(id);
+      const node = this.buildManager.nodes.get(id);
       if (node) {
         node.pos.copy(initialPos);
         node.prevPos.copy(initialPos);
       }
     }
 
-    for (const s of this.struts) {
+    for (const s of this.buildManager.struts) {
       s.isBroken = false;
       s.stress = 0;
       const mesh = this.strutMeshes.get(s.id);
@@ -501,20 +597,20 @@ export class SceneView {
   }
 
   private stepPhysics(dt: number): void {
-    stepSimulation(this.nodes, this.struts, 15, dt);
+    stepSimulation(this.buildManager.nodes, this.buildManager.struts, 15, dt);
 
-    const roadStruts = this.struts.filter(s => s.material === 'road');
-    this.gameLoop.update(roadStruts, this.nodes, dt);
+    const roadStruts = this.buildManager.struts.filter(s => s.material === 'road');
+    this.gameLoop.update(roadStruts, this.buildManager.nodes, dt);
 
     if (this.gameLoop.vehicle) {
       this.vehicleMesh.update(this.gameLoop.vehicle, dt);
     }
 
-    for (const strut of this.struts) {
+    for (const strut of this.buildManager.struts) {
       if (strut.isBroken && !this.brokenStrutIds.has(strut.id)) {
         this.brokenStrutIds.add(strut.id);
-        const nodeA = this.nodes.get(strut.nodeAId);
-        const nodeB = this.nodes.get(strut.nodeBId);
+        const nodeA = this.buildManager.nodes.get(strut.nodeAId);
+        const nodeB = this.buildManager.nodes.get(strut.nodeBId);
         if (nodeA && nodeB) {
           const mid = new THREE.Vector3(
             (nodeA.pos.x + nodeB.pos.x) * 0.5,
@@ -531,13 +627,13 @@ export class SceneView {
   }
 
   private syncMeshes(): void {
-    for (const [id, node] of this.nodes) {
+    for (const [id, node] of this.buildManager.nodes) {
       const mesh = this.nodeMeshes.get(id);
       if (mesh) {
         mesh.position.set(node.pos.x, node.pos.y, 0.05);
       }
     }
-    for (const strut of this.struts) {
+    for (const strut of this.buildManager.struts) {
       this.updateSingleStrutMesh(strut);
     }
   }
